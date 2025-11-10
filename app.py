@@ -249,32 +249,46 @@ with tabs[2]:
                 unsafe_allow_html=True
             )
 
-        # --- Custom CSS for chat bubbles ---
+                # --- Custom CSS for chat bubbles (auto-width based on text length) ---
         st.markdown("""
         <style>
         .user-msg {
             background-color: #f5f5f5;
             padding: 10px 14px;
-            border-radius: 10px;
-            margin: 8px 0;
+            border-radius: 14px;
+            margin: 6px 0;
+            display: inline-flex;
+            align-self: flex-end;
+            justify-content: flex-end;
             text-align: right;
-            max-width: 75%;
-            margin-left: auto;
             color: #111;
+            word-break: break-word;
+            max-width: 75%;
         }
         .assistant-msg {
-            background-color: #fafafa;
-            border: 1px solid #e6e6e6;
+            background-color: #ffffff;
+            border: 1px solid #e8e8e8;
             padding: 10px 14px;
-            border-radius: 10px;
-            margin: 8px 0;
+            border-radius: 14px;
+            margin: 6px 0;
+            display: inline-flex;
+            align-self: flex-start;
             text-align: left;
-            max-width: 75%;
             color: #111;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+            word-break: break-word;
+            max-width: 75%;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+        .user-msg, .assistant-msg {
+            animation: fadeIn 0.2s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         </style>
         """, unsafe_allow_html=True)
+
 
         # --- Chat input ---
         user_input = st.chat_input("Ask about collectors, regions, or interests...")
