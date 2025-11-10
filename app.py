@@ -43,6 +43,7 @@ try:
                 role = st.text_input("Primary Role")
 
             search_button = st.button("Search Leads")
+            selected_leads = []
 
             if search_button:
                 query = supabase.table("leads").select("*")
@@ -61,11 +62,57 @@ try:
 
                 if data:
                     st.write(f"Found {len(data)} results")
-                    st.dataframe(data, use_container_width=True, hide_index=True)
+
+                    for lead in data:
+                        with st.expander(f"{lead.get('full_name', 'Unnamed')} — {lead.get('city', 'Unknown')}"):
+                            c1, c2 = st.columns([8, 1])
+                            with c1:
+                                st.write(f"**Email:** {lead.get('email','—')}")
+                                st.write(f"**Tier:** {lead.get('tier','—')}")
+                                st.write(f"**Role:** {lead.get('primary_role','—')}")
+                                st.write(f"**Notes:** {lead.get('notes','')[:250]}")
+                            with c2:
+                                if st.checkbox("Select", key=f"chk_{lead['lead_id']}"):
+                                    selected_leads.append(lead["lead_id"])
                 else:
                     st.info("No leads found matching your filters.")
             else:
                 st.empty()
+
+            # --- Save to Set modal ---
+            if selected_leads:
+                st.markdown("---")
+                st.markdown(f"**{len(selected_leads)} collectors selected.**")
+
+                with st.popover("Save Selected"):
+                    st.markdown("### Save Selected Leads")
+                    mode = st.radio("Choose option:", ["Add to existing set", "Create new set"])
+
+                    if mode == "Add to existing set":
+                        existing_sets = (
+                            supabase.table("saved_sets").select("id, name").execute().data or []
+                        )
+                        set_names = {s["name"]: s["id"] for s in existing_sets}
+                        chosen = st.selectbox("Select set", list(set_names.keys()) if set_names else [])
+                        if chosen and st.button("Add"):
+                            sid = set_names[chosen]
+                            for lid in selected_leads:
+                                supabase.table("saved_set_items").insert({"set_id": sid, "lead_id": lid}).execute()
+                            st.success(f"Added {len(selected_leads)} leads to {chosen}")
+
+                    elif mode == "Create new set":
+                        new_name = st.text_input("New set name")
+                        new_desc = st.text_area("Description (optional)")
+                        if new_name and st.button("Create and Save"):
+                            r = (
+                                supabase.table("saved_sets")
+                                .insert({"name": new_name, "description": new_desc})
+                                .execute()
+                            )
+                            sid = r.data[0]["id"]
+                            for lid in selected_leads:
+                                supabase.table("saved_set_items").insert({"set_id": sid, "lead_id": lid}).execute()
+                            st.success(f"Created {new_name} and added {len(selected_leads)} leads.")
 
         # --- Divider ---
         st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
