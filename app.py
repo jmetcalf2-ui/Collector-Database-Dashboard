@@ -10,6 +10,36 @@ from pathlib import Path
 st.set_page_config(page_title="Dashboard", layout="wide")
 inject_css()
 
+# --- Full-width layout adjustments ---
+st.markdown("""
+<style>
+/* Remove default Streamlit padding and gray margin */
+.block-container {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    margin: 0 !important;
+    width: 100% !important;
+}
+
+/* Remove Streamlit’s gray left background */
+.css-18e3th9 {
+    padding-left: 0 !important;
+}
+.css-1d391kg {
+    padding-left: 0 !important;
+}
+
+/* Make background pure white */
+[data-testid="stAppViewContainer"] {
+    background-color: white !important;
+}
+[data-testid="stSidebar"] {
+    background-color: white !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
 # --- Sidebar ---
 with st.sidebar:
     st.write(" ")
