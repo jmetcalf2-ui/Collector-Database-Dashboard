@@ -15,6 +15,8 @@ with st.sidebar:
 # --- Initialize session state ---
 if "selected_leads" not in st.session_state:
     st.session_state.selected_leads = []
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 # --- Main content ---
 st.markdown("<h1>Dashboard</h1>", unsafe_allow_html=True)
@@ -96,9 +98,7 @@ try:
                     mode = st.radio("Choose option:", ["Add to existing set", "Create new set"])
 
                     if mode == "Add to existing set":
-                        existing_sets = (
-                            supabase.table("saved_sets").select("id, name").execute().data or []
-                        )
+                        existing_sets = supabase.table("saved_sets").select("id, name").execute().data or []
                         set_names = {s["name"]: s["id"] for s in existing_sets}
                         chosen = st.selectbox("Select set", list(set_names.keys()) if set_names else [])
                         if chosen and st.button("Add"):
@@ -112,11 +112,7 @@ try:
                         new_name = st.text_input("New set name")
                         new_desc = st.text_area("Description (optional)")
                         if new_name and st.button("Create and Save"):
-                            r = (
-                                supabase.table("saved_sets")
-                                .insert({"name": new_name, "description": new_desc})
-                                .execute()
-                            )
+                            r = supabase.table("saved_sets").insert({"name": new_name, "description": new_desc}).execute()
                             sid = r.data[0]["id"]
                             for lid in st.session_state.selected_leads:
                                 supabase.table("saved_set_items").insert({"set_id": sid, "lead_id": lid}).execute()
@@ -217,29 +213,25 @@ try:
                                 st.warning("Set deleted.")
                                 st.experimental_rerun()
 
-# === CHAT TAB ===
+except Exception as e:
+    st.error(f"Connection failed: {e}")
+
+# === CHAT TAB === (outside try/except)
 with tabs[2]:
     st.markdown("## Chat with Collector Intelligence")
 
     from services.rag import answer_with_context
     from pathlib import Path
 
-    # Load system prompt text
     system_prompt_path = Path("prompts/system_prompt.md")
     system_prompt = system_prompt_path.read_text().strip() if system_prompt_path.exists() else (
         "You are a helpful art-market assistant. Answer based only on the provided context."
     )
 
-    # Persistent chat memory
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    # Render previous exchanges
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # Input box (Streamlit ≥1.31)
     if prompt := st.chat_input("Ask about collectors, regions, or interests..."):
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -260,9 +252,7 @@ with tabs[2]:
                         with st.expander("Sources used"):
                             for s in res["sources"]:
                                 name = s.get("full_name", "Unknown")
-                                loc = ", ".join(
-                                    filter(None, [s.get("city"), s.get("country")])
-                                )
+                                loc = ", ".join(filter(None, [s.get("city"), s.get("country")]))
                                 snippet = (s.get("notes") or "")[:250]
                                 st.markdown(f"**{name}** ({loc})  \n{snippet}")
                     st.session_state.chat_history.append(
@@ -270,7 +260,3 @@ with tabs[2]:
                     )
                 except Exception as e:
                     st.error(f"Chat failed: {e}")
-
-
-except Exception as e:
-    st.error(f"Connection failed: {e}")
