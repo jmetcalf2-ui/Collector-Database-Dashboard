@@ -140,7 +140,6 @@ try:
                     model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 
                     emb = client.embeddings.create(model=model, input=query_text).data[0].embedding
-                    # Updated: removed schema arg, added full path "ai.semantic_search_lead_supplements"
                     res = supabase.rpc(
                         "ai.semantic_search_lead_supplements",
                         {
@@ -211,7 +210,7 @@ try:
                                 supabase.table("saved_set_items").delete().eq("set_id", s["id"]).execute()
                                 supabase.table("saved_sets").delete().eq("id", s["id"]).execute()
                                 st.warning("Set deleted.")
-                                st.experimental_rerun()
+                                st.rerun()  # Updated here!
 
 except Exception as e:
     st.error(f"Connection failed: {e}")
@@ -271,13 +270,12 @@ with tabs[2]:
         # --- New Chat Button ---
         if st.session_state.active_chat:
             if st.button("New Chat"):
-                # Archive current chat with timestamp
                 st.session_state.chat_sessions.append({
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "history": st.session_state.active_chat.copy()
                 })
                 st.session_state.active_chat = []
-                st.experimental_rerun()
+                st.rerun()  # Updated here!
 
     with right:
         st.markdown("#### Chat History")
@@ -289,4 +287,4 @@ with tabs[2]:
                 preview = session["history"][0]["content"][:60] + "..." if session["history"] else "(empty)"
                 if st.button(f"💬 {ts}\n{preview}", key=f"hist_{i}"):
                     st.session_state.active_chat = session["history"].copy()
-                    st.experimental_rerun()
+                    st.rerun()  # Updated here!
