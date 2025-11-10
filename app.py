@@ -140,14 +140,14 @@ try:
                     model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 
                     emb = client.embeddings.create(model=model, input=query_text).data[0].embedding
+                    # Updated: removed schema arg, added full path "ai.semantic_search_lead_supplements"
                     res = supabase.rpc(
-                        "semantic_search_lead_supplements",
+                        "ai.semantic_search_lead_supplements",
                         {
                             "query_embedding": emb,
                             "match_count": top_k,
                             "min_similarity": min_similarity
-                        },
-                        schema="ai"
+                        }
                     ).execute()
 
                     results = res.data or []
