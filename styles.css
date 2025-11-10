@@ -1,0 +1,39 @@
+/* Helvetica-forward, light minimal design */
+
+html, body, [class*="css"] {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+  color: #111 !important;
+}
+
+.block-container {
+  padding-top: 2rem;
+  padding-bottom: 3rem;
+}
+
+h1, h2, h3 {
+  letter-spacing: 0.2px;
+  font-weight: 500;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 1rem 1.2rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+  border: 1px solid #f1f1f1;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f7f7f7;
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+hr.soft {
+  border: none;
+  border-top: 1px solid #f0f0f0;
+  margin: 1rem 0;
+}
