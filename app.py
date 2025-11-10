@@ -224,13 +224,12 @@ with tabs[2]:
             st.info("No previous chats yet.")
         else:
             for i, session in enumerate(reversed(st.session_state.chat_sessions)):
-    summary = session.get("summary", "Untitled chat")
-    # Show only the chat title (summary) — no timestamp
-    label = f"{summary}"
-    if st.button(label, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
-        st.session_state.active_chat = session["history"].copy()
-        st.rerun()
-
+                summary = session.get("summary", "Untitled chat")
+                # Show only the chat title (summary) — no timestamp
+                label = f"{summary}"
+                if st.button(label, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
+                    st.session_state.active_chat = session["history"].copy()
+                    st.rerun()
 
     # --- RIGHT COLUMN: Active Chat ---
     with right:
