@@ -153,6 +153,10 @@ with tabs[0]:
             model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 
             try:
+                st.write(f"Using embedding model: {model}")
+                test_emb = client.embeddings.create(model=model, input="test").data[0].embedding
+                st.write(f"Embedding vector length: {len(test_emb)}")
+                
                 emb = client.embeddings.create(model=model, input=query_text).data[0].embedding
                 res = supabase.rpc(
                     "rpc_semantic_search_leads_supplements",
