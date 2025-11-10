@@ -13,20 +13,27 @@ inject_css()
 # --- Full-width but centered layout ---
 st.markdown("""
 <style>
-div[data-testid="stButton"] > button.chat-btn {
-    text-align: left;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    background-color: #f9f9f9;
-    padding: 8px 10px;
-    margin-bottom: 6px;
-    font-weight: 500;
-    color: #222;
-    white-space: pre-wrap;
+/* Left-align all buttons (chat history) */
+div[data-testid="stButton"] > button {
+    text-align: left !important;
+    justify-content: flex-start !important;
+    border: 1px solid #ddd !important;
+    border-radius: 6px !important;
+    background-color: #f9f9f9 !important;
+    padding: 8px 12px !important;
+    margin-bottom: 6px !important;
+    font-weight: 500 !important;
+    color: #222 !important;
+    white-space: pre-wrap !important;
+}
+
+/* Subtle hover effect */
+div[data-testid="stButton"] > button:hover {
+    background-color: #f1f1f1 !important;
+    border-color: #ccc !important;
 }
 </style>
 """, unsafe_allow_html=True)
-
 
 # --- Sidebar ---
 with st.sidebar:
