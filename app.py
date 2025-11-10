@@ -157,15 +157,34 @@ with tabs[0]:
                 test_emb = client.embeddings.create(model=model, input="test").data[0].embedding
                 st.write(f"Embedding vector length: {len(test_emb)}")
                 
-                emb = client.embeddings.create(model=model, input=query_text).data[0].embedding
-                res = supabase.rpc(
-                    "rpc_semantic_search_leads_supplements",
-                    {
-                        "query_embedding": emb,
-                        "match_count": top_k,
-                        "min_score": min_similarity,  # renamed key
-                    },
-                ).execute()
+                try:
+                    emb_response = client.embeddings.create(model=model, input=query_text)
+                    emb = emb_response.data[0].embedding
+                
+                    if not emb or len(emb) == 0:
+                        st.error("Embedding vector is empty — OpenAI returned no data.")
+                    else:
+                        st.success(f"✅ Embedding generated successfully ({len(emb)} dimensions)")
+                
+                        # IMPORTANT: Convert to list of floats before sending to Supabase
+                        res = supabase.rpc(
+                            "rpc_semantic_search_leads_supplements",
+                            {
+                                "query_embedding": list(map(float, emb)),
+                                "match_count": top_k,
+                                "min_score": min_similarity,
+                            },
+                        ).execute()
+                
+                        results = res.data or []
+                        if results:
+                            st.success(f"Found {len(results)} semantic matches")
+                            st.dataframe(results, use_container_width=True, hide_index=True)
+                        else:
+                            st.info("No semantic matches found for that query.")
+                except Exception as e:
+                    st.error(f"Semantic search failed: {e}")
+
 
                 results = res.data or []
                 if results:
