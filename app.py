@@ -196,7 +196,7 @@ with tabs[1]:
 # === CHAT TAB ===
 # ======================================================================
 with tabs[2]:
-    st.markdown("<div style='height: 2.4rem;'></div>", unsafe_allow_html=True)
+    st.markdown("## ", unsafe_allow_html=True)
 
     # --- System prompt setup ---
     system_prompt_path = Path("prompts/system_prompt.md")
