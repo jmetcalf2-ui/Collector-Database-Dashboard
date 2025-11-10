@@ -131,72 +131,36 @@ with tabs[0]:
     st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
 
     # --- Semantic Search Section ---
-    st.markdown("### Semantic Search (Notes & Content)")
-
-    query_text = st.text_input(
-        "Describe the type of collector or interest you’re looking for",
-        placeholder="e.g. Minimalism collectors or those following Bruce Nauman",
-        key="semantic_query_text",
-    )
-
-    col_a, col_b = st.columns([2, 1])
-    with col_a:
-        top_k = st.slider("Number of results", 5, 100, 25, key="semantic_top_k")
-    with col_b:
-        min_similarity = st.slider("Minimum similarity", 0.0, 1.0, 0.15, 0.01, key="semantic_similarity")
-
-    run_semantic = st.button("Run Semantic Search", key="semantic_search_button")
-
     if run_semantic and query_text.strip():
-        with st.spinner("Embedding query and searching..."):
+    with st.spinner("Embedding query and searching..."):
+        try:
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = "text-embedding-3-large"  # Force 3072-dimension embeddings
+            model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
 
-            try:
-                st.write(f"Using embedding model: {model}")
-                test_emb = client.embeddings.create(model=model, input="test").data[0].embedding
-                st.write(f"Embedding vector length: {len(test_emb)}")
-                
-                try:
-                    emb_response = client.embeddings.create(model=model, input=query_text)
-                    emb = emb_response.data[0].embedding
-                
-                    if not emb or len(emb) == 0:
-                        st.error("Embedding vector is empty — OpenAI returned no data.")
-                    else:
-                        st.success(f"✅ Embedding generated successfully ({len(emb)} dimensions)")
-                
-                        # IMPORTANT: Convert to list of floats before sending to Supabase
-                        res = supabase.rpc(
-                            "rpc_semantic_search_leads_supplements",
-                            {
-                                "query_embedding": list(map(float, emb)),
-                                "match_count": top_k,
-                                "min_score": min_similarity,
-                            },
-                        ).execute()
-                
-                        results = res.data or []
-                        if results:
-                            st.success(f"Found {len(results)} semantic matches")
-                            st.dataframe(results, use_container_width=True, hide_index=True)
-                        else:
-                            st.info("No semantic matches found for that query.")
-                except Exception as e:
-                    st.error(f"Semantic search failed: {e}")
+            emb_response = client.embeddings.create(model=model, input=query_text)
+            emb = emb_response.data[0].embedding
 
+            if not emb:
+                st.error("❌ OpenAI returned an empty embedding.")
+            else:
+                st.write(f"✅ Generated {len(emb)}-dimensional embedding.")
+                res = supabase.rpc(
+                    "rpc_semantic_search_leads_supplements",
+                    {
+                        "query_embedding": list(map(float, emb)),
+                        "match_count": top_k,
+                        "min_score": min_similarity,
+                    },
+                ).execute()
 
                 results = res.data or []
                 if results:
                     st.success(f"Found {len(results)} semantic matches")
                     st.dataframe(results, use_container_width=True, hide_index=True)
                 else:
-                    st.info("No semantic matches found for that query.")
-            except Exception as e:
-                st.error(f"Semantic search failed: {e}")
-    else:
-        st.caption("Enter a description and click **Run Semantic Search** to start.")
-
+                    st.info("No semantic matches found.")
+        except Exception as e:
+            st.error(f"Semantic search failed: {e}")
 
 # ======================================================================
 # === SAVED SETS TAB ===
