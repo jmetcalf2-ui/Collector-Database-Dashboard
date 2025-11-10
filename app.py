@@ -253,8 +253,36 @@ with tabs[2]:
 
         chat_container = st.container()
         for msg in st.session_state.active_chat:
-            with chat_container.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+    role_class = "user-msg" if msg["role"] == "user" else "assistant-msg"
+    st.markdown(
+        f"""
+        <div class="{role_class}">
+            {msg["content"]}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Custom CSS for clean messages
+st.markdown("""
+<style>
+.user-msg {
+    background-color: #f9f9f9;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    text-align: right;
+}
+.assistant-msg {
+    background-color: #ffffff;
+    border: 1px solid #eee;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    text-align: left;
+}
+</style>
+""", unsafe_allow_html=True)
 
         # --- Chat input ---
         user_input = st.chat_input("Ask about collectors, regions, or interests...")
