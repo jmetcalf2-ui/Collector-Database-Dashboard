@@ -46,7 +46,7 @@ try:
         if country:
             query = query.ilike("country", f"%{country}%")
         if tier:
-            query = query.eq("tier", int(tier))
+            query = query.eq("tier", tier)
         if role:
             query = query.ilike("primary_role", f"%{role}%")
 
@@ -62,9 +62,9 @@ try:
     st.markdown("</div>", unsafe_allow_html=True)
 
     # === Semantic Search Section ===
-    st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
+    st.markdown("<br><hr class='soft'/>", unsafe_allow_html=True)  # clean spacing
     st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("### Semantic Search")
+    st.markdown("### Semantic Search (Notes & Content)")
 
     query_text = st.text_input(
         "Describe the type of collector or interest you’re looking for",
