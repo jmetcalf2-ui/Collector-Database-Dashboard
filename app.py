@@ -26,6 +26,17 @@ div[data-testid="column"]:first-child {
     border-right: 1px solid #eee;
     padding-right: 12px;
 }
+div[data-testid="stButton"] > button.chat-btn {
+    text-align: left;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background-color: #f9f9f9;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #222;
+    white-space: pre-wrap;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -78,7 +89,6 @@ try:
 
                 if data:
                     st.write(f"Found {len(data)} results")
-
                     for lead in data:
                         with st.expander(f"{lead.get('full_name', 'Unnamed')} — {lead.get('city', 'Unknown')}"):
                             c1, c2 = st.columns([8, 1])
@@ -89,7 +99,11 @@ try:
                                 st.write(f"**Notes:** {lead.get('notes','')[:250]}")
                             with c2:
                                 chk_key = f"chk_{lead['lead_id']}"
-                                checked = st.checkbox("Select", key=chk_key, value=lead["lead_id"] in st.session_state.selected_leads)
+                                checked = st.checkbox(
+                                    "Select",
+                                    key=chk_key,
+                                    value=lead["lead_id"] in st.session_state.selected_leads,
+                                )
                                 if checked and lead["lead_id"] not in st.session_state.selected_leads:
                                     st.session_state.selected_leads.append(lead["lead_id"])
                                 elif not checked and lead["lead_id"] in st.session_state.selected_leads:
@@ -103,7 +117,6 @@ try:
             if st.session_state.selected_leads:
                 st.markdown("---")
                 st.markdown(f"**{len(st.session_state.selected_leads)} collectors selected.**")
-
                 with st.popover("Save Selected"):
                     st.markdown("### Save Selected Leads")
                     mode = st.radio("Choose option:", ["Add to existing set", "Create new set"])
@@ -115,7 +128,9 @@ try:
                         if chosen and st.button("Add"):
                             sid = set_names[chosen]
                             for lid in st.session_state.selected_leads:
-                                supabase.table("saved_set_items").insert({"set_id": sid, "lead_id": lid}).execute()
+                                supabase.table("saved_set_items").insert(
+                                    {"set_id": sid, "lead_id": lid}
+                                ).execute()
                             st.success(f"Added {len(st.session_state.selected_leads)} leads to {chosen}")
                             st.session_state.selected_leads = []
 
@@ -123,10 +138,14 @@ try:
                         new_name = st.text_input("New set name")
                         new_desc = st.text_area("Description (optional)")
                         if new_name and st.button("Create and Save"):
-                            r = supabase.table("saved_sets").insert({"name": new_name, "description": new_desc}).execute()
+                            r = supabase.table("saved_sets").insert(
+                                {"name": new_name, "description": new_desc}
+                            ).execute()
                             sid = r.data[0]["id"]
                             for lid in st.session_state.selected_leads:
-                                supabase.table("saved_set_items").insert({"set_id": sid, "lead_id": lid}).execute()
+                                supabase.table("saved_set_items").insert(
+                                    {"set_id": sid, "lead_id": lid}
+                                ).execute()
                             st.success(f"Created {new_name} and added {len(st.session_state.selected_leads)} leads.")
                             st.session_state.selected_leads = []
 
@@ -136,7 +155,6 @@ try:
         # --- Semantic Search ---
         with st.container():
             st.markdown("### Semantic Search (Notes & Content)")
-
             query_text = st.text_input(
                 "Describe the type of collector or interest you’re looking for",
                 placeholder="e.g. Minimalism collectors or those following Bruce Nauman"
@@ -149,15 +167,14 @@ try:
                 with st.spinner("Embedding query and searching..."):
                     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
                     model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-
                     emb = client.embeddings.create(model=model, input=query_text).data[0].embedding
                     res = supabase.rpc(
                         "ai.semantic_search_lead_supplements",
                         {
                             "query_embedding": emb,
                             "match_count": top_k,
-                            "min_similarity": min_similarity
-                        }
+                            "min_similarity": min_similarity,
+                        },
                     ).execute()
 
                     results = res.data or []
@@ -172,9 +189,7 @@ try:
     # === SAVED SETS TAB ===
     with tabs[1]:
         st.markdown("## Saved Sets")
-
         sets_data = supabase.table("saved_sets").select("*").order("created_at", desc=True).execute().data or []
-
         if not sets_data:
             st.info("No saved sets found. Use the Search tab to create one.")
         else:
@@ -182,7 +197,6 @@ try:
                 with st.expander(f"{s['name']}"):
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
-
                     members = (
                         supabase.table("saved_set_items")
                         .select("lead_id, leads(full_name, city, tier, primary_role)")
@@ -191,7 +205,6 @@ try:
                         .data
                         or []
                     )
-
                     if members:
                         member_df = [
                             {
@@ -241,13 +254,11 @@ with tabs[2]:
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # --- Initialize chat sessions ---
     if "chat_sessions" not in st.session_state:
         st.session_state.chat_sessions = []
     if "active_chat" not in st.session_state:
         st.session_state.active_chat = []
 
-    # --- Layout: Sidebar + Chat window ---
     left, right = st.columns([2.2, 5])
 
     # --- LEFT COLUMN: Chat History ---
@@ -260,14 +271,8 @@ with tabs[2]:
             for i, session in enumerate(reversed(st.session_state.chat_sessions)):
                 ts = session["timestamp"]
                 summary = session.get("summary", "Untitled chat")
-                label_html = (
-                    f"<div style='padding:8px 10px;border-radius:6px;border:1px solid #ddd;"
-                    f"margin-bottom:6px;background-color:#f9f9f9;cursor:pointer;'>"
-                    f"<div style='font-weight:500;color:#222;'>{summary}</div>"
-                    f"<div style='font-size:12px;color:gray;'>{ts}</div></div>"
-                )
-                st.markdown(label_html, unsafe_allow_html=True)
-                if st.button(f"Open Chat {i}", key=f"chat_open_{i}", label_visibility="collapsed"):
+                label = f"{summary}\n{ts}"
+                if st.button(label, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
                     st.session_state.active_chat = session["history"].copy()
                     st.rerun()
 
@@ -287,7 +292,6 @@ with tabs[2]:
             st.session_state.active_chat.append({"role": "user", "content": user_input})
             with chat_container.chat_message("user"):
                 st.markdown(user_input)
-
             with chat_container.chat_message("assistant"):
                 with st.spinner("Consulting database and reasoning..."):
                     try:
