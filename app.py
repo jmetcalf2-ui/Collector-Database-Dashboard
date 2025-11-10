@@ -155,7 +155,7 @@ with tabs[0]:
             try:
                 emb = client.embeddings.create(model=model, input=query_text).data[0].embedding
                 res = supabase.rpc(
-                    "rpc_semantic_search_leads",
+                    "rpc_semantic_search_leads_supplements",
                     {
                         "query_embedding": emb,
                         "match_count": top_k,
