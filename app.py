@@ -66,7 +66,7 @@ try:
 
     # === Semantic Search Section ===
     with st.container():
-        st.markdown("### Semantic Search (Notes & Content)")
+        st.markdown("### Semantic Search")
 
         query_text = st.text_input(
             "Describe the type of collector or interest you’re looking for",
