@@ -61,5 +61,49 @@ try:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # === Semantic Search Section ===
+    st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
+    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("### Semantic Search (Notes & Content)")
+
+    query_text = st.text_input(
+        "Describe the type of collector or interest you’re looking for",
+        placeholder="e.g. Minimalism collectors or those following Bruce Nauman"
+    )
+    top_k = st.slider("Number of results", 5, 100, 25)
+    min_similarity = st.slider("Minimum similarity threshold", 0.0, 1.0, 0.15, 0.01)
+    run_semantic = st.button("Run Semantic Search")
+
+    if run_semantic and query_text.strip():
+        with st.spinner("Embedding query and searching..."):
+            from openai import OpenAI
+            import os
+
+            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
+
+            # Create the query embedding
+            emb = client.embeddings.create(model=model, input=query_text).data[0].embedding
+
+            # Call your Supabase function
+            res = supabase.rpc(
+                "semantic_search_lead_supplements",
+                {
+                    "query_embedding": emb,
+                    "match_count": top_k,
+                    "min_similarity": min_similarity
+                },
+                schema="ai"
+            ).execute()
+
+            results = res.data or []
+            if results:
+                st.write(f"Found {len(results)} semantic matches")
+                st.dataframe(results, use_container_width=True, hide_index=True)
+            else:
+                st.info("No semantic matches found for that query.")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
 except Exception as e:
     st.error(f"Connection failed: {e}")
