@@ -155,13 +155,13 @@ with tabs[0]:
             try:
                 emb = client.embeddings.create(model=model, input=query_text).data[0].embedding
                 res = supabase.rpc(
-                    "rpc_semantic_search_leads",  # correct RPC name
+                    "rpc_semantic_search_leads",
                     {
                         "query_embedding": emb,
                         "match_count": top_k,
-                        "min_similarity": min_similarity,
+                        "min_score": min_similarity,  # ← rename here
                     },
-                ).execute()
+                    ).execute()
 
                 results = res.data or []
                 if results:
