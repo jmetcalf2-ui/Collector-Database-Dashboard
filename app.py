@@ -167,19 +167,34 @@ with tabs[1]:
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
 
-# ======================================================================
 # === CHAT TAB ===
-# ======================================================================
 with tabs[2]:
     st.markdown("## Chat with Collector Intelligence")
-    from services.rag import answer_with_context
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    from pathlib import Path
+    from datetime import datetime
+
+    # --- System prompt setup ---
     system_prompt_path = Path("prompts/system_prompt.md")
-    system_prompt = system_prompt_path.read_text().strip() if system_prompt_path.exists() else (
-        "You are a helpful art-market assistant. Answer based only on the provided context."
-    )
+    if system_prompt_path.exists():
+        system_prompt = system_prompt_path.read_text().strip()
+    else:
+        system_prompt = (
+            "You are CollectorGPT — a helpful art-market assistant. "
+            "You answer questions conversationally, referencing collectors, artists, galleries, and market trends when relevant. "
+            "Keep responses factual, concise, and well-reasoned."
+        )
 
+    # --- Initialize OpenAI client ---
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+    # --- Initialize chat sessions ---
+    if "chat_sessions" not in st.session_state:
+        st.session_state.chat_sessions = []
+    if "active_chat" not in st.session_state:
+        st.session_state.active_chat = []
+
+    # --- Layout ---
     left, right = st.columns([2.2, 5])
 
     # --- LEFT COLUMN: Chat History ---
@@ -189,57 +204,47 @@ with tabs[2]:
             st.info("No previous chats yet.")
         else:
             for i, session in enumerate(reversed(st.session_state.chat_sessions)):
-                label = f"{session.get('summary', 'Untitled chat')}\n{session['timestamp']}"
-                if st.button(label, key=f"chat_open_{i}", use_container_width=True):
+                ts = session["timestamp"]
+                summary = session.get("summary", "Untitled chat")
+                label = f"{summary}\n{ts}"
+                if st.button(label, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
                     st.session_state.active_chat = session["history"].copy()
                     st.rerun()
 
     # --- RIGHT COLUMN: Active Chat ---
-       # --- RIGHT COLUMN: Active Chat ---
     with right:
         st.markdown("#### Current Chat")
 
-        # --- Wrap in scrollable container to prevent stacking
-        chat_area = st.container()
+        chat_container = st.container()
+        for msg in st.session_state.active_chat:
+            with chat_container.chat_message(msg["role"]):
+                st.markdown(msg["content"])
 
-        # If there are active messages, show them
-        if st.session_state.active_chat:
-            with chat_area:
-                for msg in st.session_state.active_chat:
-                    with st.chat_message(msg["role"]):
-                        st.markdown(msg["content"])
-        else:
-            # Render placeholder when no active chat
-            with chat_area:
-                st.info("Start a new chat or select one from the left.")
-
-        # --- Input pinned to bottom ---
+        # --- Chat input ---
         user_input = st.chat_input("Ask about collectors, regions, or interests...")
 
-        # --- Handle user input
-        if user_input and supabase:
-            # Add user message
+        if user_input:
+            # Add user message to session
             st.session_state.active_chat.append({"role": "user", "content": user_input})
-
-            # Display user message immediately
-            with chat_area.chat_message("user"):
+            with chat_container.chat_message("user"):
                 st.markdown(user_input)
 
-            # Generate assistant reply
-            with chat_area.chat_message("assistant"):
-                with st.spinner("Consulting database and reasoning..."):
-                    from services.rag import answer_with_context
+            # Get assistant response via OpenAI
+            with chat_container.chat_message("assistant"):
+                with st.spinner("Thinking..."):
                     try:
-                        res = answer_with_context(
-                            supabase,
-                            question=user_input,
-                            system_prompt=system_prompt,
-                            match_count=10,
-                            min_similarity=0.15,
+                        messages = [{"role": "system", "content": system_prompt}]
+                        messages.extend(st.session_state.active_chat)
+                        completion = client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=messages,
+                            temperature=0.5,
+                            max_tokens=700,
                         )
-                        st.markdown(res["answer"])
+                        response_text = completion.choices[0].message.content.strip()
+                        st.markdown(response_text)
                         st.session_state.active_chat.append(
-                            {"role": "assistant", "content": res["answer"]}
+                            {"role": "assistant", "content": response_text}
                         )
                     except Exception as e:
                         st.error(f"Chat failed: {e}")
@@ -248,69 +253,29 @@ with tabs[2]:
         if st.session_state.active_chat:
             st.divider()
             if st.button("New Chat", use_container_width=True):
-                # Generate a short title before clearing
                 try:
                     preview_text = " ".join(
                         [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
                     )[:600]
                     summary_prompt = (
-                        "Summarize this chat in 3–5 plain words, no emojis or punctuation. "
-                        "Example: Top collectors in Europe.\n\n"
+                        "Summarize this conversation in 3–5 plain words, no emojis or punctuation. "
+                        "Example: 'European collectors trends'.\n\n"
                         f"{preview_text}"
                     )
                     summary_resp = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[{"role": "user", "content": summary_prompt}],
                         max_tokens=20,
-                        temperature=0.4,
-                    )
-                    summary_text = summary_resp.choices[0].message.content.strip() or "Untitled chat"
-                except Exception:
-                    summary_text = "Untitled chat"
-
-                # Save and reset chat safely
-                st.session_state.chat_sessions.append({
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "summary": summary_text,
-                    "history": st.session_state.active_chat.copy(),
-                })
-                st.session_state.active_chat = []
-                st.experimental_rerun()
-
-        # --- NEW CHAT BUTTON ---
-        if st.session_state.active_chat:
-            st.divider()
-            if st.button("New Chat", use_container_width=True):
-                try:
-                    preview_text = " ".join(
-                        [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
-                    )[:600]
-
-                    # Force summary creation before rerun
-                    summary_prompt = (
-                        "Summarize this chat in 3–5 plain words, no emojis or punctuation. "
-                        "Example: Top collectors in Europe.\n\n"
-                        f"{preview_text}"
-                    )
-                    summary_resp = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[{"role": "user", "content": summary_prompt}],
-                        max_tokens=20,
-                        temperature=0.4,
+                        temperature=0.5,
                     )
                     summary_text = summary_resp.choices[0].message.content.strip()
-                    if not summary_text:
-                        summary_text = "Untitled chat"
                 except Exception:
                     summary_text = "Untitled chat"
 
-                # Save session safely
                 st.session_state.chat_sessions.append({
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "summary": summary_text,
                     "history": st.session_state.active_chat.copy(),
                 })
-
-                # Reset chat
                 st.session_state.active_chat = []
                 st.rerun()
