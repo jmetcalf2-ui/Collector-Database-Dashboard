@@ -157,7 +157,59 @@ try:
     # === SAVED SETS TAB ===
     with tabs[1]:
         st.markdown("## Saved Sets")
-        st.info("This section will allow you to create and manage custom collector lists.")
+
+        # Fetch all sets
+        sets_data = supabase.table("saved_sets").select("*").order("created_at", desc=True).execute().data or []
+
+        if not sets_data:
+            st.info("No saved sets found. Use the Search tab to create one.")
+        else:
+            for s in sets_data:
+                with st.expander(f"{s['name']}"):
+                    st.write(f"**Description:** {s.get('description', '—')}")
+                    st.write(f"**Created:** {s.get('created_at', '—')}")
+
+                    # Load members
+                    members = (
+                        supabase.table("saved_set_items")
+                        .select("lead_id, leads(full_name, city, tier, primary_role)")
+                        .eq("set_id", s["id"])
+                        .execute()
+                        .data
+                        or []
+                    )
+
+                    if members:
+                        member_df = [
+                            {
+                                "Name": m["leads"]["full_name"],
+                                "City": m["leads"]["city"],
+                                "Tier": m["leads"]["tier"],
+                                "Role": m["leads"]["primary_role"],
+                            }
+                            for m in members if m.get("leads")
+                        ]
+                        st.dataframe(member_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("This set is empty.")
+
+                    # Edit / Delete options
+                    with st.expander("Manage Set"):
+                        new_name = st.text_input(f"Rename '{s['name']}'", value=s["name"], key=f"rename_{s['id']}")
+                        new_desc = st.text_area("Edit description", value=s.get("description", ""), key=f"desc_{s['id']}")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("Save Changes", key=f"save_{s['id']}"):
+                                supabase.table("saved_sets").update(
+                                    {"name": new_name, "description": new_desc}
+                                ).eq("id", s["id"]).execute()
+                                st.success("Saved set updated successfully.")
+                        with col2:
+                            if st.button("Delete Set", key=f"delete_{s['id']}"):
+                                supabase.table("saved_set_items").delete().eq("set_id", s["id"]).execute()
+                                supabase.table("saved_sets").delete().eq("id", s["id"]).execute()
+                                st.warning("Set deleted.")
+                                st.experimental_rerun()
 
     # === CHAT TAB ===
     with tabs[2]:
