@@ -18,7 +18,7 @@ try:
     st.success("Connected to Supabase")
 
     # === Collector Lookup Section ===
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("<div class='card' style='margin-top: 1.5rem;'>", unsafe_allow_html=True)
     st.markdown("### Collector Lookup")
 
     # Search filters
@@ -62,8 +62,7 @@ try:
     st.markdown("</div>", unsafe_allow_html=True)
 
     # === Semantic Search Section ===
-    st.markdown("<br><hr class='soft'/>", unsafe_allow_html=True)  # clean spacing
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
+    st.markdown("<div class='card' style='margin-top: 2rem;'>", unsafe_allow_html=True)
     st.markdown("### Semantic Search (Notes & Content)")
 
     query_text = st.text_input(
