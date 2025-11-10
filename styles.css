@@ -44,16 +44,22 @@ hr.soft {
   margin: 1.5rem 0 1rem 0;
 }
 
-/* 🔧 Remove ghost white rounded placeholder containers */
-div[data-testid="stHorizontalBlock"] > div:empty,
+/* --- REAL FIX: remove blank Streamlit “ghost” containers --- */
 div[data-testid="stVerticalBlock"] > div:empty,
-div[data-testid="column"] > div:empty,
-div[data-testid="stBlock"] > div:empty {
+div[data-testid="stHorizontalBlock"] > div:empty,
+div[data-testid="stBlock"] > div:empty,
+div[data-testid="stVerticalBlockBorderWrapper"] > div:empty {
   display: none !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
-/* 🔧 Fix extra white “input-like” rows Streamlit inserts */
-div[data-testid="stTextInput"] > div:first-child:empty {
+/* Remove lingering “input-style” artifacts */
+div[data-testid="stTextInputRootElement"] > div:empty {
   display: none !important;
 }
 
