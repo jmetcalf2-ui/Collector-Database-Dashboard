@@ -217,10 +217,60 @@ try:
                                 st.warning("Set deleted.")
                                 st.experimental_rerun()
 
-    # === CHAT TAB ===
-    with tabs[2]:
-        st.markdown("## Chat")
-        st.info("AI chat capabilities coming soon.")
+# === CHAT TAB ===
+with tabs[2]:
+    st.markdown("## Chat with Collector Intelligence")
+
+    from services.rag import answer_with_context
+    from pathlib import Path
+
+    # Load system prompt text
+    system_prompt_path = Path("prompts/system_prompt.md")
+    system_prompt = system_prompt_path.read_text().strip() if system_prompt_path.exists() else (
+        "You are a helpful art-market assistant. Answer based only on the provided context."
+    )
+
+    # Persistent chat memory
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    # Render previous exchanges
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # Input box (Streamlit ≥1.31)
+    if prompt := st.chat_input("Ask about collectors, regions, or interests..."):
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("Consulting database and reasoning..."):
+                try:
+                    res = answer_with_context(
+                        supabase,
+                        question=prompt,
+                        system_prompt=system_prompt,
+                        match_count=10,
+                        min_similarity=0.15,
+                    )
+                    st.markdown(res["answer"])
+                    if res["sources"]:
+                        with st.expander("Sources used"):
+                            for s in res["sources"]:
+                                name = s.get("full_name", "Unknown")
+                                loc = ", ".join(
+                                    filter(None, [s.get("city"), s.get("country")])
+                                )
+                                snippet = (s.get("notes") or "")[:250]
+                                st.markdown(f"**{name}** ({loc})  \n{snippet}")
+                    st.session_state.chat_history.append(
+                        {"role": "assistant", "content": res["answer"]}
+                    )
+                except Exception as e:
+                    st.error(f"Chat failed: {e}")
+
 
 except Exception as e:
     st.error(f"Connection failed: {e}")
