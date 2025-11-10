@@ -132,35 +132,35 @@ with tabs[0]:
 
     # --- Semantic Search Section ---
     if run_semantic and query_text.strip():
-    with st.spinner("Embedding query and searching..."):
-        try:
-            client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-
-            emb_response = client.embeddings.create(model=model, input=query_text)
-            emb = emb_response.data[0].embedding
-
-            if not emb:
-                st.error("❌ OpenAI returned an empty embedding.")
-            else:
-                st.write(f"✅ Generated {len(emb)}-dimensional embedding.")
-                res = supabase.rpc(
-                    "rpc_semantic_search_leads_supplements",
-                    {
-                        "query_embedding": list(map(float, emb)),
-                        "match_count": top_k,
-                        "min_score": min_similarity,
-                    },
-                ).execute()
-
-                results = res.data or []
-                if results:
-                    st.success(f"Found {len(results)} semantic matches")
-                    st.dataframe(results, use_container_width=True, hide_index=True)
+        with st.spinner("Embedding query and searching..."):
+            try:
+                client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
+    
+                emb_response = client.embeddings.create(model=model, input=query_text)
+                emb = emb_response.data[0].embedding
+    
+                if not emb:
+                    st.error("❌ OpenAI returned an empty embedding.")
                 else:
-                    st.info("No semantic matches found.")
-        except Exception as e:
-            st.error(f"Semantic search failed: {e}")
+                    st.write(f"✅ Generated {len(emb)}-dimensional embedding.")
+                    res = supabase.rpc(
+                        "rpc_semantic_search_leads_supplements",
+                        {
+                            "query_embedding": list(map(float, emb)),
+                            "match_count": top_k,
+                            "min_score": min_similarity,
+                        },
+                    ).execute()
+    
+                    results = res.data or []
+                    if results:
+                        st.success(f"Found {len(results)} semantic matches")
+                        st.dataframe(results, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No semantic matches found.")
+            except Exception as e:
+                st.error(f"Semantic search failed: {e}")
 
 # ======================================================================
 # === SAVED SETS TAB ===
