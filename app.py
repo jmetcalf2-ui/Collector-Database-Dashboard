@@ -10,35 +10,41 @@ from pathlib import Path
 st.set_page_config(page_title="Dashboard", layout="wide")
 inject_css()
 
-# --- Full-width layout adjustments ---
+# --- Full-width but centered layout ---
 st.markdown("""
 <style>
-/* Remove default Streamlit padding and gray margin */
-.block-container {
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
-    margin: 0 !important;
-    width: 100% !important;
-}
-
-/* Remove Streamlit’s gray left background */
-.css-18e3th9 {
-    padding-left: 0 !important;
-}
-.css-1d391kg {
-    padding-left: 0 !important;
-}
-
-/* Make background pure white */
+/* Give app a clean white background */
 [data-testid="stAppViewContainer"] {
     background-color: white !important;
 }
-[data-testid="stSidebar"] {
+
+/* Make the main content centered with consistent margins */
+.block-container {
+    padding-left: 3rem !important;   /* about 0.5 inch */
+    padding-right: 3rem !important;  /* about 0.5 inch */
+    max-width: 1500px !important;    /* prevents stretching on big screens */
+    margin: 0 auto !important;       /* center horizontally */
+}
+
+/* Remove default gray padding behind content */
+.css-18e3th9, .css-1d391kg {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+/* Sidebar + header styling alignment */
+[data-testid="stSidebar"], [data-testid="stHeader"] {
     background-color: white !important;
+}
+
+/* Optional: softer divider line style */
+hr.soft {
+    border: none;
+    border-top: 1px solid #eee;
+    margin: 1.5rem 0;
 }
 </style>
 """, unsafe_allow_html=True)
-
 
 # --- Sidebar ---
 with st.sidebar:
