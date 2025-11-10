@@ -150,7 +150,7 @@ with tabs[0]:
     if run_semantic and query_text.strip():
         with st.spinner("Embedding query and searching..."):
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
+            model = "text-embedding-3-large"  # Force 3072-dimension embeddings
 
             try:
                 st.write(f"Using embedding model: {model}")
