@@ -222,41 +222,71 @@ with tabs[2]:
 
     from services.rag import answer_with_context
     from pathlib import Path
+    from datetime import datetime
 
     system_prompt_path = Path("prompts/system_prompt.md")
     system_prompt = system_prompt_path.read_text().strip() if system_prompt_path.exists() else (
         "You are a helpful art-market assistant. Answer based only on the provided context."
     )
 
-    for msg in st.session_state.chat_history:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+    # --- Initialize chat sessions ---
+    if "chat_sessions" not in st.session_state:
+        st.session_state.chat_sessions = []  # list of dicts: {timestamp, history}
+    if "active_chat" not in st.session_state:
+        st.session_state.active_chat = []
 
-    if prompt := st.chat_input("Ask about collectors, regions, or interests..."):
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    # --- Layout: Two columns ---
+    left, right = st.columns([3, 1.2])
+    with left:
+        st.markdown("#### Current Chat")
 
-        with st.chat_message("assistant"):
-            with st.spinner("Consulting database and reasoning..."):
-                try:
-                    res = answer_with_context(
-                        supabase,
-                        question=prompt,
-                        system_prompt=system_prompt,
-                        match_count=10,
-                        min_similarity=0.15,
-                    )
-                    st.markdown(res["answer"])
-                    if res["sources"]:
-                        with st.expander("Sources used"):
-                            for s in res["sources"]:
-                                name = s.get("full_name", "Unknown")
-                                loc = ", ".join(filter(None, [s.get("city"), s.get("country")]))
-                                snippet = (s.get("notes") or "")[:250]
-                                st.markdown(f"**{name}** ({loc})  \n{snippet}")
-                    st.session_state.chat_history.append(
-                        {"role": "assistant", "content": res["answer"]}
-                    )
-                except Exception as e:
-                    st.error(f"Chat failed: {e}")
+        # Display existing messages in the current chat
+        for msg in st.session_state.active_chat:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        # Chat input
+        if prompt := st.chat_input("Ask about collectors, regions, or interests..."):
+            st.session_state.active_chat.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+
+            with st.chat_message("assistant"):
+                with st.spinner("Consulting database and reasoning..."):
+                    try:
+                        res = answer_with_context(
+                            supabase,
+                            question=prompt,
+                            system_prompt=system_prompt,
+                            match_count=10,
+                            min_similarity=0.15,
+                        )
+                        st.markdown(res["answer"])
+                        st.session_state.active_chat.append(
+                            {"role": "assistant", "content": res["answer"]}
+                        )
+                    except Exception as e:
+                        st.error(f"Chat failed: {e}")
+
+        # --- New Chat Button ---
+        if st.session_state.active_chat:
+            if st.button("New Chat"):
+                # Archive current chat with timestamp
+                st.session_state.chat_sessions.append({
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "history": st.session_state.active_chat.copy()
+                })
+                st.session_state.active_chat = []
+                st.experimental_rerun()
+
+    with right:
+        st.markdown("#### Chat History")
+        if not st.session_state.chat_sessions:
+            st.info("No previous chats yet.")
+        else:
+            for i, session in enumerate(reversed(st.session_state.chat_sessions)):
+                ts = session["timestamp"]
+                preview = session["history"][0]["content"][:60] + "..." if session["history"] else "(empty)"
+                if st.button(f"💬 {ts}\n{preview}", key=f"hist_{i}"):
+                    st.session_state.active_chat = session["history"].copy()
+                    st.experimental_rerun()
