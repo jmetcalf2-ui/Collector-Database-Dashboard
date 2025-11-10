@@ -6,10 +6,6 @@ from components import inject_css
 st.set_page_config(page_title="Dashboard", layout="wide")
 inject_css()
 
-# --- Sidebar (minimal) ---
-with st.sidebar:
-    st.write(" ")
-
 # --- Main content ---
 st.markdown("<h1>Dashboard</h1>", unsafe_allow_html=True)
 
