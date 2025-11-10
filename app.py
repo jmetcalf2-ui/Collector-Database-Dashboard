@@ -13,31 +13,22 @@ inject_css()
 # --- Full-width but centered layout ---
 st.markdown("""
 <style>
-/* Give app a clean white background */
 [data-testid="stAppViewContainer"] {
     background-color: white !important;
 }
-
-/* Make the main content centered with consistent margins */
 .block-container {
-    padding-left: 3rem !important;   /* about 0.5 inch */
-    padding-right: 3rem !important;  /* about 0.5 inch */
-    max-width: 1500px !important;    /* prevents stretching on big screens */
-    margin: 0 auto !important;       /* center horizontally */
+    padding-left: 3rem !important;
+    padding-right: 3rem !important;
+    max-width: 1500px !important;
+    margin: 0 auto !important;
 }
-
-/* Remove default gray padding behind content */
 .css-18e3th9, .css-1d391kg {
     padding-left: 0 !important;
     padding-right: 0 !important;
 }
-
-/* Sidebar + header styling alignment */
 [data-testid="stSidebar"], [data-testid="stHeader"] {
     background-color: white !important;
 }
-
-/* Optional: softer divider line style */
 hr.soft {
     border: none;
     border-top: 1px solid #eee;
@@ -203,12 +194,11 @@ with tabs[1]:
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
 
+# ======================================================================
 # === CHAT TAB ===
+# ======================================================================
 with tabs[2]:
     st.markdown("## Chat with Collector Intelligence")
-
-    from pathlib import Path
-    from datetime import datetime
 
     # --- System prompt setup ---
     system_prompt_path = Path("prompts/system_prompt.md")
@@ -223,12 +213,6 @@ with tabs[2]:
 
     # --- Initialize OpenAI client ---
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    # --- Initialize chat sessions ---
-    if "chat_sessions" not in st.session_state:
-        st.session_state.chat_sessions = []
-    if "active_chat" not in st.session_state:
-        st.session_state.active_chat = []
 
     # --- Layout ---
     left, right = st.columns([2.2, 5])
@@ -252,66 +236,70 @@ with tabs[2]:
         st.markdown("#### Current Chat")
 
         chat_container = st.container()
-        for msg in st.session_state.active_chat:
-    role_class = "user-msg" if msg["role"] == "user" else "assistant-msg"
-    st.markdown(
-        f"""
-        <div class="{role_class}">
-            {msg["content"]}
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
 
-# Custom CSS for clean messages
-st.markdown("""
-<style>
-.user-msg {
-    background-color: #f9f9f9;
-    padding: 10px 14px;
-    border-radius: 8px;
-    margin-bottom: 8px;
-    text-align: right;
-}
-.assistant-msg {
-    background-color: #ffffff;
-    border: 1px solid #eee;
-    padding: 10px 14px;
-    border-radius: 8px;
-    margin-bottom: 8px;
-    text-align: left;
-}
-</style>
-""", unsafe_allow_html=True)
+        # --- Clean chat message rendering (no icons) ---
+        for msg in st.session_state.active_chat:
+            role_class = "user-msg" if msg["role"] == "user" else "assistant-msg"
+            chat_container.markdown(
+                f"""
+                <div class="{role_class}">
+                    {msg["content"]}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        # --- Custom CSS for chat bubbles ---
+        st.markdown("""
+        <style>
+        .user-msg {
+            background-color: #f5f5f5;
+            padding: 10px 14px;
+            border-radius: 10px;
+            margin: 8px 0;
+            text-align: right;
+            max-width: 75%;
+            margin-left: auto;
+            color: #111;
+        }
+        .assistant-msg {
+            background-color: #fafafa;
+            border: 1px solid #e6e6e6;
+            padding: 10px 14px;
+            border-radius: 10px;
+            margin: 8px 0;
+            text-align: left;
+            max-width: 75%;
+            color: #111;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
         # --- Chat input ---
         user_input = st.chat_input("Ask about collectors, regions, or interests...")
 
         if user_input:
-            # Add user message to session
             st.session_state.active_chat.append({"role": "user", "content": user_input})
-            with chat_container.chat_message("user"):
-                st.markdown(user_input)
+            chat_container.markdown(f"<div class='user-msg'>{user_input}</div>", unsafe_allow_html=True)
 
-            # Get assistant response via OpenAI
-            with chat_container.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    try:
-                        messages = [{"role": "system", "content": system_prompt}]
-                        messages.extend(st.session_state.active_chat)
-                        completion = client.chat.completions.create(
-                            model="gpt-4o-mini",
-                            messages=messages,
-                            temperature=0.5,
-                            max_tokens=700,
-                        )
-                        response_text = completion.choices[0].message.content.strip()
-                        st.markdown(response_text)
-                        st.session_state.active_chat.append(
-                            {"role": "assistant", "content": response_text}
-                        )
-                    except Exception as e:
-                        st.error(f"Chat failed: {e}")
+            with st.spinner("Thinking..."):
+                try:
+                    messages = [{"role": "system", "content": system_prompt}]
+                    messages.extend(st.session_state.active_chat)
+                    completion = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=messages,
+                        temperature=0.5,
+                        max_tokens=700,
+                    )
+                    response_text = completion.choices[0].message.content.strip()
+                    chat_container.markdown(f"<div class='assistant-msg'>{response_text}</div>", unsafe_allow_html=True)
+                    st.session_state.active_chat.append(
+                        {"role": "assistant", "content": response_text}
+                    )
+                except Exception as e:
+                    st.error(f"Chat failed: {e}")
 
         # --- New Chat Button ---
         if st.session_state.active_chat:
