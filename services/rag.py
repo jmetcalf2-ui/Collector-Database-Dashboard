@@ -4,9 +4,8 @@ import os
 from typing import List, Dict, Any, Tuple
 from openai import OpenAI
 
-
 DEFAULT_EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-DEFAULT_CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4.1-mini")
+DEFAULT_CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
 
 
 def _get_openai() -> OpenAI:
@@ -23,7 +22,7 @@ def embed_query(text: str, model: str | None = None) -> List[float]:
     client = _get_openai()
     mdl = model or DEFAULT_EMBEDDING_MODEL
     resp = client.embeddings.create(model=mdl, input=text)
-    return resp.data[0].embedding  # type: ignore[no-any-return]
+    return resp.data[0].embedding
 
 
 def semantic_search_rag_chunks(
@@ -34,11 +33,11 @@ def semantic_search_rag_chunks(
     embedding_model: str | None = None,
 ) -> List[Dict[str, Any]]:
     """
-    Runs a similarity search directly against ai.rag_chunks.
-    Requires the `match_rag_chunks` function (below) in your Supabase DB:
-    
+    Runs a similarity search directly against ai.rag_chunks via RPC.
+    Assumes you have this SQL function in Supabase:
+
         create or replace function ai.match_rag_chunks(
-            query_embedding vector(1536),
+            query_embedding vector(3072),
             match_count int default 10,
             min_similarity float default 0.15
         )
@@ -59,24 +58,29 @@ def semantic_search_rag_chunks(
                 city,
                 country,
                 notes,
-                1 - (ai.embedding <=> query_embedding) as similarity
+                1 - (embeddings <=> query_embedding) as similarity
             from ai.rag_chunks
-            where 1 - (ai.rag_chunks.embeddings <=> query_embedding) > min_similarity
-            order by ai.rag_chunks.embeddings <=> query_embedding
+            where 1 - (embeddings <=> query_embedding) > min_similarity
+            order by embeddings <=> query_embedding
             limit match_count;
         end;
         $$;
     """
     qvec = embed_query(query, model=embedding_model)
+
+    # ✅ Fixed: remove deprecated schema param and use fully qualified name
     res = supabase.rpc(
-        "match_rag_chunks",
+        "ai.match_rag_chunks",
         {
             "query_embedding": qvec,
             "match_count": match_count,
             "min_similarity": min_similarity,
         },
-        schema="ai",
     ).execute()
+
+    # Handle null or empty response safely
+    if not res or not getattr(res, "data", None):
+        return []
     return res.data or []
 
 
@@ -88,10 +92,13 @@ def _trim_context(chunks: List[Dict[str, Any]], max_chars: int = 3500) -> Tuple[
     buf: List[str] = []
     total = 0
     for row in chunks:
-        piece = row.get("notes") or ""
+        piece = (row.get("notes") or "").strip()
         if not piece:
             continue
-        entry = f"{row.get('full_name', 'Unknown')}, {row.get('city', '')}, {row.get('country', '')}:\n{piece.strip()}"
+        entry = (
+            f"{row.get('full_name', 'Unknown')} "
+            f"({row.get('city', '')}, {row.get('country', '')}):\n{piece}"
+        )
         if total + len(entry) + 2 > max_chars:
             break
         buf.append(entry)
@@ -116,7 +123,7 @@ def answer_with_context(
     # 1. Fetch relevant chunks
     chunks = semantic_search_rag_chunks(
         supabase,
-        question,
+        query=question,
         match_count=match_count,
         min_similarity=min_similarity,
         embedding_model=embedding_model,
@@ -125,7 +132,7 @@ def answer_with_context(
     # 2. Format context
     context_text, used_chunks = _trim_context(chunks, max_chars=max_context_chars)
 
-    # 3. Query OpenAI
+    # 3. Build GPT prompt
     client = _get_openai()
     mdl = chat_model or DEFAULT_CHAT_MODEL
     messages = [
@@ -133,13 +140,19 @@ def answer_with_context(
         {
             "role": "user",
             "content": (
-                f"Answer the question below using only the provided context.\n\n"
+                "Answer the question below using only the provided context.\n\n"
                 f"Context:\n{context_text}\n\nQuestion:\n{question}"
             ),
         },
     ]
-    completion = client.chat.completions.create(model=mdl, messages=messages)
-    answer = completion.choices[0].message.content
+
+    completion = client.chat.completions.create(
+        model=mdl,
+        messages=messages,
+        temperature=0.3,
+    )
+
+    answer = completion.choices[0].message.content.strip() if completion.choices else "(no answer)"
 
     return {
         "answer": answer,
@@ -150,5 +163,6 @@ def answer_with_context(
             "match_count": match_count,
             "min_similarity": min_similarity,
             "context_chars": len(context_text),
+            "context_snippet": context_text[:200],
         },
     }
