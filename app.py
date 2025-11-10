@@ -30,7 +30,7 @@ try:
     with col3:
         country = st.text_input("Country")
     with col4:
-        tier = st.selectbox("Tier", ["", "1", "2", "3"], index=0)
+        tier = st.selectbox("Tier", ["", "A", "B", "C"], index=0)
     with col5:
         role = st.text_input("Primary Role")
 
