@@ -3,22 +3,26 @@ from supabase_client import get_supabase
 from components import inject_css
 import os
 from openai import OpenAI
+from datetime import datetime
+from pathlib import Path
 
 # --- Page setup ---
 st.set_page_config(page_title="Dashboard", layout="wide")
 inject_css()
 
-# --- Sidebar (minimal) ---
+# --- Sidebar ---
 with st.sidebar:
     st.write(" ")
 
 # --- Initialize session state ---
 if "selected_leads" not in st.session_state:
     st.session_state.selected_leads = []
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+if "chat_sessions" not in st.session_state:
+    st.session_state.chat_sessions = []
+if "active_chat" not in st.session_state:
+    st.session_state.active_chat = []
 
-# --- Global style adjustments for sidebar look ---
+# --- Global style ---
 st.markdown("""
 <style>
 div[data-testid="column"]:first-child {
@@ -43,236 +47,102 @@ div[data-testid="stButton"] > button.chat-btn {
 # --- Main content ---
 st.markdown("<h1>Dashboard</h1>", unsafe_allow_html=True)
 
+# --- Connect Supabase ---
 try:
     supabase = get_supabase()
     st.success("Connected to Supabase")
+except Exception as e:
+    st.error(f"Connection failed: {e}")
+    supabase = None
 
-    # === Tabs ===
-    tabs = st.tabs(["Search", "Saved Sets", "Chat"])
+# --- Tabs ---
+tabs = st.tabs(["Search", "Saved Sets", "Chat"])
 
-    # === SEARCH TAB ===
-    with tabs[0]:
-        st.markdown("## Search")
+# ======================================================================
+# === SEARCH TAB ===
+# ======================================================================
+with tabs[0]:
+    st.markdown("## Search")
 
-        # --- Collector Lookup ---
-        with st.container():
-            st.markdown("### Collector Lookup")
+    col1, col2, col3, col4, col5 = st.columns([2, 1.2, 1.2, 1.2, 1.2])
+    with col1:
+        keyword = st.text_input("Keyword", placeholder="Name, email, interests, etc.")
+    with col2:
+        city = st.text_input("City")
+    with col3:
+        country = st.text_input("Country")
+    with col4:
+        tier = st.selectbox("Tier", ["", "A", "B", "C"], index=0)
+    with col5:
+        role = st.text_input("Primary Role")
 
-            col1, col2, col3, col4, col5 = st.columns([2, 1.2, 1.2, 1.2, 1.2])
-            with col1:
-                keyword = st.text_input("Keyword", placeholder="Name, email, interests, etc.")
-            with col2:
-                city = st.text_input("City")
-            with col3:
-                country = st.text_input("Country")
-            with col4:
-                tier = st.selectbox("Tier", ["", "A", "B", "C"], index=0)
-            with col5:
-                role = st.text_input("Primary Role")
-
-            search_button = st.button("Search Leads")
-
-            if search_button:
-                query = supabase.table("leads").select("*")
-                if keyword:
-                    query = query.ilike("full_name", f"%{keyword}%")
-                if city:
-                    query = query.ilike("city", f"%{city}%")
-                if country:
-                    query = query.ilike("country", f"%{country}%")
-                if tier:
-                    query = query.eq("tier", tier)
-                if role:
-                    query = query.ilike("primary_role", f"%{role}%")
-
-                data = query.limit(100).execute().data or []
-
-                if data:
-                    st.write(f"Found {len(data)} results")
-                    for lead in data:
-                        with st.expander(f"{lead.get('full_name', 'Unnamed')} — {lead.get('city', 'Unknown')}"):
-                            c1, c2 = st.columns([8, 1])
-                            with c1:
-                                st.write(f"**Email:** {lead.get('email','—')}")
-                                st.write(f"**Tier:** {lead.get('tier','—')}")
-                                st.write(f"**Role:** {lead.get('primary_role','—')}")
-                                st.write(f"**Notes:** {lead.get('notes','')[:250]}")
-                            with c2:
-                                chk_key = f"chk_{lead['lead_id']}"
-                                checked = st.checkbox(
-                                    "Select",
-                                    key=chk_key,
-                                    value=lead["lead_id"] in st.session_state.selected_leads,
-                                )
-                                if checked and lead["lead_id"] not in st.session_state.selected_leads:
-                                    st.session_state.selected_leads.append(lead["lead_id"])
-                                elif not checked and lead["lead_id"] in st.session_state.selected_leads:
-                                    st.session_state.selected_leads.remove(lead["lead_id"])
-                else:
-                    st.info("No leads found matching your filters.")
-            else:
-                st.empty()
-
-            # --- Save to Set modal ---
-            if st.session_state.selected_leads:
-                st.markdown("---")
-                st.markdown(f"**{len(st.session_state.selected_leads)} collectors selected.**")
-                with st.popover("Save Selected"):
-                    st.markdown("### Save Selected Leads")
-                    mode = st.radio("Choose option:", ["Add to existing set", "Create new set"])
-
-                    if mode == "Add to existing set":
-                        existing_sets = supabase.table("saved_sets").select("id, name").execute().data or []
-                        set_names = {s["name"]: s["id"] for s in existing_sets}
-                        chosen = st.selectbox("Select set", list(set_names.keys()) if set_names else [])
-                        if chosen and st.button("Add"):
-                            sid = set_names[chosen]
-                            for lid in st.session_state.selected_leads:
-                                supabase.table("saved_set_items").insert(
-                                    {"set_id": sid, "lead_id": lid}
-                                ).execute()
-                            st.success(f"Added {len(st.session_state.selected_leads)} leads to {chosen}")
-                            st.session_state.selected_leads = []
-
-                    elif mode == "Create new set":
-                        new_name = st.text_input("New set name")
-                        new_desc = st.text_area("Description (optional)")
-                        if new_name and st.button("Create and Save"):
-                            r = supabase.table("saved_sets").insert(
-                                {"name": new_name, "description": new_desc}
-                            ).execute()
-                            sid = r.data[0]["id"]
-                            for lid in st.session_state.selected_leads:
-                                supabase.table("saved_set_items").insert(
-                                    {"set_id": sid, "lead_id": lid}
-                                ).execute()
-                            st.success(f"Created {new_name} and added {len(st.session_state.selected_leads)} leads.")
-                            st.session_state.selected_leads = []
-
-        # --- Divider ---
-        st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
-
-        # --- Semantic Search ---
-        with st.container():
-            st.markdown("### Semantic Search (Notes & Content)")
-            query_text = st.text_input(
-                "Describe the type of collector or interest you’re looking for",
-                placeholder="e.g. Minimalism collectors or those following Bruce Nauman"
-            )
-            top_k = st.slider("Number of results", 5, 100, 25)
-            min_similarity = st.slider("Minimum similarity threshold", 0.0, 1.0, 0.15, 0.01)
-            run_semantic = st.button("Run Semantic Search")
-
-            if run_semantic and query_text.strip():
-                with st.spinner("Embedding query and searching..."):
-                    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                    model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-                    emb = client.embeddings.create(model=model, input=query_text).data[0].embedding
-                    res = supabase.rpc(
-                        "ai.semantic_search_lead_supplements",
-                        {
-                            "query_embedding": emb,
-                            "match_count": top_k,
-                            "min_similarity": min_similarity,
-                        },
-                    ).execute()
-
-                    results = res.data or []
-                    if results:
-                        st.write(f"Found {len(results)} semantic matches")
-                        st.dataframe(results, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("No semantic matches found for that query.")
-            else:
-                st.empty()
-
-    # === SAVED SETS TAB ===
-    with tabs[1]:
-        st.markdown("## Saved Sets")
-        sets_data = supabase.table("saved_sets").select("*").order("created_at", desc=True).execute().data or []
-        if not sets_data:
-            st.info("No saved sets found. Use the Search tab to create one.")
+    if st.button("Search Leads") and supabase:
+        query = supabase.table("leads").select("*")
+        if keyword:
+            query = query.ilike("full_name", f"%{keyword}%")
+        if city:
+            query = query.ilike("city", f"%{city}%")
+        if country:
+            query = query.ilike("country", f"%{country}%")
+        if tier:
+            query = query.eq("tier", tier)
+        if role:
+            query = query.ilike("primary_role", f"%{role}%")
+        data = query.limit(100).execute().data or []
+        if data:
+            st.write(f"Found {len(data)} results")
+            for lead in data:
+                with st.expander(f"{lead.get('full_name', 'Unnamed')} — {lead.get('city', 'Unknown')}"):
+                    st.write(f"**Email:** {lead.get('email','—')}")
+                    st.write(f"**Tier:** {lead.get('tier','—')}")
+                    st.write(f"**Role:** {lead.get('primary_role','—')}")
+                    st.write(f"**Notes:** {lead.get('notes','')[:250]}")
         else:
-            for s in sets_data:
+            st.info("No leads found.")
+    else:
+        st.empty()
+
+# ======================================================================
+# === SAVED SETS TAB ===
+# ======================================================================
+with tabs[1]:
+    st.markdown("## Saved Sets")
+    if not supabase:
+        st.warning("Database unavailable.")
+    else:
+        sets = supabase.table("saved_sets").select("*").order("created_at", desc=True).execute().data or []
+        if not sets:
+            st.info("No saved sets yet.")
+        else:
+            for s in sets:
                 with st.expander(f"{s['name']}"):
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
-                    members = (
-                        supabase.table("saved_set_items")
-                        .select("lead_id, leads(full_name, city, tier, primary_role)")
-                        .eq("set_id", s["id"])
-                        .execute()
-                        .data
-                        or []
-                    )
-                    if members:
-                        member_df = [
-                            {
-                                "Name": m["leads"]["full_name"],
-                                "City": m["leads"]["city"],
-                                "Tier": m["leads"]["tier"],
-                                "Role": m["leads"]["primary_role"],
-                            }
-                            for m in members if m.get("leads")
-                        ]
-                        st.dataframe(member_df, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("This set is empty.")
 
-                    with st.expander("Manage Set"):
-                        new_name = st.text_input(f"Rename '{s['name']}'", value=s["name"], key=f"rename_{s['id']}")
-                        new_desc = st.text_area("Edit description", value=s.get("description", ""), key=f"desc_{s['id']}")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.button("Save Changes", key=f"save_{s['id']}"):
-                                supabase.table("saved_sets").update(
-                                    {"name": new_name, "description": new_desc}
-                                ).eq("id", s["id"]).execute()
-                                st.success("Saved set updated successfully.")
-                        with col2:
-                            if st.button("Delete Set", key=f"delete_{s['id']}"):
-                                supabase.table("saved_set_items").delete().eq("set_id", s["id"]).execute()
-                                supabase.table("saved_sets").delete().eq("id", s["id"]).execute()
-                                st.warning("Set deleted.")
-                                st.rerun()
-
-except Exception as e:
-    st.error(f"Connection failed: {e}")
-
-# === CHAT TAB === (outside try/except)
+# ======================================================================
+# === CHAT TAB ===
+# ======================================================================
 with tabs[2]:
     st.markdown("## Chat with Collector Intelligence")
-
     from services.rag import answer_with_context
-    from pathlib import Path
-    from datetime import datetime
 
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     system_prompt_path = Path("prompts/system_prompt.md")
     system_prompt = system_prompt_path.read_text().strip() if system_prompt_path.exists() else (
         "You are a helpful art-market assistant. Answer based only on the provided context."
     )
-
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-    if "chat_sessions" not in st.session_state:
-        st.session_state.chat_sessions = []
-    if "active_chat" not in st.session_state:
-        st.session_state.active_chat = []
 
     left, right = st.columns([2.2, 5])
 
     # --- LEFT COLUMN: Chat History ---
     with left:
         st.markdown("### Chats")
-
         if not st.session_state.chat_sessions:
             st.info("No previous chats yet.")
         else:
             for i, session in enumerate(reversed(st.session_state.chat_sessions)):
-                ts = session["timestamp"]
-                summary = session.get("summary", "Untitled chat")
-                label = f"{summary}\n{ts}"
-                if st.button(label, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
+                label = f"{session.get('summary', 'Untitled chat')}\n{session['timestamp']}"
+                if st.button(label, key=f"chat_open_{i}", use_container_width=True):
                     st.session_state.active_chat = session["history"].copy()
                     st.rerun()
 
@@ -281,17 +151,21 @@ with tabs[2]:
         st.markdown("#### Current Chat")
 
         chat_container = st.container()
+        # Display only current chat messages
         for msg in st.session_state.active_chat:
             with chat_container.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        # --- Input always pinned to bottom ---
+        # --- Input ---
         user_input = st.chat_input("Ask about collectors, regions, or interests...")
 
-        if user_input:
+        if user_input and supabase:
+            # Add user message
             st.session_state.active_chat.append({"role": "user", "content": user_input})
             with chat_container.chat_message("user"):
                 st.markdown(user_input)
+
+            # Generate assistant reply
             with chat_container.chat_message("assistant"):
                 with st.spinner("Consulting database and reasoning..."):
                     try:
@@ -309,7 +183,7 @@ with tabs[2]:
                     except Exception as e:
                         st.error(f"Chat failed: {e}")
 
-        # --- New Chat Button ---
+        # --- NEW CHAT BUTTON ---
         if st.session_state.active_chat:
             st.divider()
             if st.button("New Chat", use_container_width=True):
@@ -317,25 +191,32 @@ with tabs[2]:
                     preview_text = " ".join(
                         [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
                     )[:600]
+
+                    # Force summary creation before rerun
                     summary_prompt = (
                         "Summarize this chat in 3–5 plain words, no emojis or punctuation. "
-                        "Example: 'Top collectors in Europe'.\n\n"
+                        "Example: Top collectors in Europe.\n\n"
                         f"{preview_text}"
                     )
                     summary_resp = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[{"role": "user", "content": summary_prompt}],
                         max_tokens=20,
-                        temperature=0.5,
+                        temperature=0.4,
                     )
                     summary_text = summary_resp.choices[0].message.content.strip()
+                    if not summary_text:
+                        summary_text = "Untitled chat"
                 except Exception:
                     summary_text = "Untitled chat"
 
+                # Save session safely
                 st.session_state.chat_sessions.append({
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "summary": summary_text,
-                    "history": st.session_state.active_chat.copy()
+                    "history": st.session_state.active_chat.copy(),
                 })
+
+                # Reset chat
                 st.session_state.active_chat = []
                 st.rerun()
