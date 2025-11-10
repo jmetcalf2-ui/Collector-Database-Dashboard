@@ -212,12 +212,20 @@ with tabs[2]:
     # --- Initialize OpenAI client ---
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # --- Layout ---
-    # Match width alignment with Search tab
-    container = st.container()
-    with container:
-        left, right = st.columns([2.5, 7])
-
+    # --- Layout (match width with Search tab) ---
+    chat_container_full = st.container()
+    with chat_container_full:
+        st.markdown(
+            """
+            <style>
+            [data-testid="stHorizontalBlock"] {
+                width: 100% !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        left, right = st.columns([2.4, 6.6], gap="large")
 
     # --- LEFT COLUMN: Chat History ---
     with left:
