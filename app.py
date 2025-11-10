@@ -64,7 +64,7 @@ try:
     # === Semantic Search Section ===
     st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
     st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("### Semantic Search (Notes & Content)")
+    st.markdown("### Semantic Search")
 
     query_text = st.text_input(
         "Describe the type of collector or interest you’re looking for",
