@@ -13,29 +13,20 @@ inject_css()
 # --- Full-width but centered layout ---
 st.markdown("""
 <style>
-[data-testid="stAppViewContainer"] {
-    background-color: white !important;
-}
-.block-container {
-    padding-left: 3rem !important;
-    padding-right: 3rem !important;
-    max-width: 1500px !important;
-    margin: 0 auto !important;
-}
-.css-18e3th9, .css-1d391kg {
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-}
-[data-testid="stSidebar"], [data-testid="stHeader"] {
-    background-color: white !important;
-}
-hr.soft {
-    border: none;
-    border-top: 1px solid #eee;
-    margin: 1.5rem 0;
+div[data-testid="stButton"] > button.chat-btn {
+    text-align: left;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background-color: #f9f9f9;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #222;
+    white-space: pre-wrap;
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 # --- Sidebar ---
 with st.sidebar:
