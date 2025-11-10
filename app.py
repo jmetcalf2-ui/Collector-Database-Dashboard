@@ -6,6 +6,10 @@ from components import inject_css
 st.set_page_config(page_title="Dashboard", layout="wide")
 inject_css()
 
+# --- Sidebar (minimal) ---
+with st.sidebar:
+    st.write(" ")
+
 # --- Main content ---
 st.markdown("<h1>Dashboard</h1>", unsafe_allow_html=True)
 
@@ -32,7 +36,6 @@ try:
 
     search_button = st.button("Search Leads")
 
-    results = []
     if search_button:
         query = supabase.table("leads").select("*")
         if keyword:
@@ -46,14 +49,16 @@ try:
         if role:
             query = query.ilike("primary_role", f"%{role}%")
 
-        data = query.limit(100).execute()
-        results = data.data or []
+        data = query.limit(100).execute().data or []
 
-        if results:
-            st.write(f"Found {len(results)} results")
-            st.dataframe(results, use_container_width=True, hide_index=True)
+        if data:
+            st.write(f"Found {len(data)} results")
+            st.dataframe(data, use_container_width=True, hide_index=True)
         else:
             st.info("No leads found matching your filters.")
+    else:
+        # When not searching, show nothing — no placeholder table
+        st.empty()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -97,6 +102,9 @@ try:
                 st.dataframe(results, use_container_width=True, hide_index=True)
             else:
                 st.info("No semantic matches found for that query.")
+    else:
+        # Prevent Streamlit from pre-rendering an empty frame
+        st.empty()
 
     st.markdown("</div>", unsafe_allow_html=True)
 
