@@ -44,12 +44,20 @@ hr.soft {
   margin: 1.5rem 0 1rem 0;
 }
 
-/* 🔧 Remove stray ghost text-input bars Streamlit injects */
-div[data-testid="stTextInput"] > div:first-child {
+/* 🔧 Remove ghost white rounded placeholder containers */
+div[data-testid="stHorizontalBlock"] > div:empty,
+div[data-testid="stVerticalBlock"] > div:empty,
+div[data-testid="column"] > div:empty,
+div[data-testid="stBlock"] > div:empty {
   display: none !important;
 }
 
-/* Adjust top spacing between stacked cards */
+/* 🔧 Fix extra white “input-like” rows Streamlit inserts */
+div[data-testid="stTextInput"] > div:first-child:empty {
+  display: none !important;
+}
+
+/* Tighten spacing between cards */
 div.block-container > div:has(> div.card) {
   margin-top: 0 !important;
 }
