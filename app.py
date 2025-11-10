@@ -12,6 +12,10 @@ inject_css()
 with st.sidebar:
     st.write(" ")
 
+# --- Initialize session state ---
+if "selected_leads" not in st.session_state:
+    st.session_state.selected_leads = []
+
 # --- Main content ---
 st.markdown("<h1>Dashboard</h1>", unsafe_allow_html=True)
 
@@ -43,7 +47,6 @@ try:
                 role = st.text_input("Primary Role")
 
             search_button = st.button("Search Leads")
-            selected_leads = []
 
             if search_button:
                 query = supabase.table("leads").select("*")
@@ -72,17 +75,21 @@ try:
                                 st.write(f"**Role:** {lead.get('primary_role','—')}")
                                 st.write(f"**Notes:** {lead.get('notes','')[:250]}")
                             with c2:
-                                if st.checkbox("Select", key=f"chk_{lead['lead_id']}"):
-                                    selected_leads.append(lead["lead_id"])
+                                chk_key = f"chk_{lead['lead_id']}"
+                                checked = st.checkbox("Select", key=chk_key, value=lead["lead_id"] in st.session_state.selected_leads)
+                                if checked and lead["lead_id"] not in st.session_state.selected_leads:
+                                    st.session_state.selected_leads.append(lead["lead_id"])
+                                elif not checked and lead["lead_id"] in st.session_state.selected_leads:
+                                    st.session_state.selected_leads.remove(lead["lead_id"])
                 else:
                     st.info("No leads found matching your filters.")
             else:
                 st.empty()
 
             # --- Save to Set modal ---
-            if selected_leads:
+            if st.session_state.selected_leads:
                 st.markdown("---")
-                st.markdown(f"**{len(selected_leads)} collectors selected.**")
+                st.markdown(f"**{len(st.session_state.selected_leads)} collectors selected.**")
 
                 with st.popover("Save Selected"):
                     st.markdown("### Save Selected Leads")
@@ -96,9 +103,10 @@ try:
                         chosen = st.selectbox("Select set", list(set_names.keys()) if set_names else [])
                         if chosen and st.button("Add"):
                             sid = set_names[chosen]
-                            for lid in selected_leads:
+                            for lid in st.session_state.selected_leads:
                                 supabase.table("saved_set_items").insert({"set_id": sid, "lead_id": lid}).execute()
-                            st.success(f"Added {len(selected_leads)} leads to {chosen}")
+                            st.success(f"Added {len(st.session_state.selected_leads)} leads to {chosen}")
+                            st.session_state.selected_leads = []
 
                     elif mode == "Create new set":
                         new_name = st.text_input("New set name")
@@ -110,9 +118,10 @@ try:
                                 .execute()
                             )
                             sid = r.data[0]["id"]
-                            for lid in selected_leads:
+                            for lid in st.session_state.selected_leads:
                                 supabase.table("saved_set_items").insert({"set_id": sid, "lead_id": lid}).execute()
-                            st.success(f"Created {new_name} and added {len(selected_leads)} leads.")
+                            st.success(f"Created {new_name} and added {len(st.session_state.selected_leads)} leads.")
+                            st.session_state.selected_leads = []
 
         # --- Divider ---
         st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
@@ -158,7 +167,6 @@ try:
     with tabs[1]:
         st.markdown("## Saved Sets")
 
-        # Fetch all sets
         sets_data = supabase.table("saved_sets").select("*").order("created_at", desc=True).execute().data or []
 
         if not sets_data:
@@ -169,7 +177,6 @@ try:
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
 
-                    # Load members
                     members = (
                         supabase.table("saved_set_items")
                         .select("lead_id, leads(full_name, city, tier, primary_role)")
@@ -193,7 +200,6 @@ try:
                     else:
                         st.info("This set is empty.")
 
-                    # Edit / Delete options
                     with st.expander("Manage Set"):
                         new_name = st.text_input(f"Rename '{s['name']}'", value=s["name"], key=f"rename_{s['id']}")
                         new_desc = st.text_area("Edit description", value=s.get("description", ""), key=f"desc_{s['id']}")
