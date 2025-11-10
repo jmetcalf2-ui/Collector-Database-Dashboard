@@ -147,27 +147,40 @@ with tabs[2]:
                     st.rerun()
 
     # --- RIGHT COLUMN: Active Chat ---
+       # --- RIGHT COLUMN: Active Chat ---
     with right:
         st.markdown("#### Current Chat")
 
-        chat_container = st.container()
-        # Display only current chat messages
-        for msg in st.session_state.active_chat:
-            with chat_container.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+        # --- Wrap in scrollable container to prevent stacking
+        chat_area = st.container()
 
-        # --- Input ---
+        # If there are active messages, show them
+        if st.session_state.active_chat:
+            with chat_area:
+                for msg in st.session_state.active_chat:
+                    with st.chat_message(msg["role"]):
+                        st.markdown(msg["content"])
+        else:
+            # Render placeholder when no active chat
+            with chat_area:
+                st.info("Start a new chat or select one from the left.")
+
+        # --- Input pinned to bottom ---
         user_input = st.chat_input("Ask about collectors, regions, or interests...")
 
+        # --- Handle user input
         if user_input and supabase:
             # Add user message
             st.session_state.active_chat.append({"role": "user", "content": user_input})
-            with chat_container.chat_message("user"):
+
+            # Display user message immediately
+            with chat_area.chat_message("user"):
                 st.markdown(user_input)
 
             # Generate assistant reply
-            with chat_container.chat_message("assistant"):
+            with chat_area.chat_message("assistant"):
                 with st.spinner("Consulting database and reasoning..."):
+                    from services.rag import answer_with_context
                     try:
                         res = answer_with_context(
                             supabase,
@@ -182,6 +195,39 @@ with tabs[2]:
                         )
                     except Exception as e:
                         st.error(f"Chat failed: {e}")
+
+        # --- New Chat Button ---
+        if st.session_state.active_chat:
+            st.divider()
+            if st.button("New Chat", use_container_width=True):
+                # Generate a short title before clearing
+                try:
+                    preview_text = " ".join(
+                        [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
+                    )[:600]
+                    summary_prompt = (
+                        "Summarize this chat in 3–5 plain words, no emojis or punctuation. "
+                        "Example: Top collectors in Europe.\n\n"
+                        f"{preview_text}"
+                    )
+                    summary_resp = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": summary_prompt}],
+                        max_tokens=20,
+                        temperature=0.4,
+                    )
+                    summary_text = summary_resp.choices[0].message.content.strip() or "Untitled chat"
+                except Exception:
+                    summary_text = "Untitled chat"
+
+                # Save and reset chat safely
+                st.session_state.chat_sessions.append({
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "summary": summary_text,
+                    "history": st.session_state.active_chat.copy(),
+                })
+                st.session_state.active_chat = []
+                st.experimental_rerun()
 
         # --- NEW CHAT BUTTON ---
         if st.session_state.active_chat:
