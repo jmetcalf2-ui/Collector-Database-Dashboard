@@ -159,9 +159,9 @@ with tabs[0]:
                     {
                         "query_embedding": emb,
                         "match_count": top_k,
-                        "min_score": min_similarity,  # ← rename here
+                        "min_score": min_similarity,  # renamed key
                     },
-                    ).execute()
+                ).execute()
 
                 results = res.data or []
                 if results:
