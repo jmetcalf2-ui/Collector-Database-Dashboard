@@ -5,24 +5,29 @@ html, body, [class*="css"] {
   color: #111 !important;
 }
 
+/* Page layout */
 .block-container {
   padding-top: 2rem;
   padding-bottom: 3rem;
 }
 
+/* Typography */
 h1, h2, h3 {
   letter-spacing: 0.2px;
   font-weight: 500;
 }
 
+/* Card containers */
 .card {
   background: #fff;
   border-radius: 16px;
   padding: 1rem 1.2rem;
   box-shadow: 0 4px 16px rgba(0,0,0,0.05);
   border: 1px solid #f1f1f1;
+  margin-top: 1.2rem;
 }
 
+/* Badges / tags */
 .badge {
   display: inline-block;
   padding: 2px 8px;
@@ -32,8 +37,19 @@ h1, h2, h3 {
   margin-right: 6px;
 }
 
+/* Soft divider lines */
 hr.soft {
   border: none;
   border-top: 1px solid #f0f0f0;
-  margin: 1rem 0;
+  margin: 1.5rem 0 1rem 0;
+}
+
+/* 🔧 Remove stray ghost text-input bars Streamlit injects */
+div[data-testid="stTextInput"] > div:first-child {
+  display: none !important;
+}
+
+/* Adjust top spacing between stacked cards */
+div.block-container > div:has(> div.card) {
+  margin-top: 0 !important;
 }
