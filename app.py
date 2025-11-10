@@ -228,23 +228,44 @@ with tabs[2]:
         "You are a helpful art-market assistant. Answer based only on the provided context."
     )
 
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
     # --- Initialize chat sessions ---
     if "chat_sessions" not in st.session_state:
-        st.session_state.chat_sessions = []  # list of dicts: {timestamp, history}
+        st.session_state.chat_sessions = []  # list of dicts: {timestamp, summary, history}
     if "active_chat" not in st.session_state:
         st.session_state.active_chat = []
 
-    # --- Layout: Two columns ---
-    left, right = st.columns([3, 1.2])
+    # --- Layout: Sidebar-style Chat History ---
+    left, right = st.columns([2.2, 5])
     with left:
+        st.markdown("### Chats")
+
+        if not st.session_state.chat_sessions:
+            st.info("No previous chats yet.")
+        else:
+            for i, session in enumerate(reversed(st.session_state.chat_sessions)):
+                ts = session["timestamp"]
+                summary = session.get("summary", "Untitled chat")
+                summary_html = (
+                    f"<div style='padding:6px 10px; border-radius:6px; border:1px solid #ddd; "
+                    f"margin-bottom:6px; background-color:#f9f9f9; cursor:pointer;'>"
+                    f"<div style='font-weight:500; color:#222;'>{summary}</div>"
+                    f"<div style='font-size:12px; color:gray;'>{ts}</div></div>"
+                )
+                if st.button(summary_html, key=f"hist_{i}", use_container_width=True):
+                    st.session_state.active_chat = session["history"].copy()
+                    st.rerun()
+
+    with right:
         st.markdown("#### Current Chat")
 
-        # Display existing messages in the current chat
+        # Display current chat
         for msg in st.session_state.active_chat:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        # Chat input
+        # --- Input box ---
         if prompt := st.chat_input("Ask about collectors, regions, or interests..."):
             st.session_state.active_chat.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
@@ -269,22 +290,33 @@ with tabs[2]:
 
         # --- New Chat Button ---
         if st.session_state.active_chat:
-            if st.button("New Chat"):
+            if st.button("New Chat", use_container_width=True):
+                # Generate summary of current chat using OpenAI
+                try:
+                    preview_text = " ".join(
+                        [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
+                    )[:600]
+
+                    summary_prompt = (
+                        "Summarize this chat in 3–5 plain words with no emojis, no punctuation, "
+                        "and no stylistic flair. Example: 'Top collectors in Europe'.\n\n"
+                        f"{preview_text}"
+                    )
+                    summary_resp = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": summary_prompt}],
+                        max_tokens=20,
+                        temperature=0.5
+                    )
+                    summary_text = summary_resp.choices[0].message.content.strip()
+                except Exception:
+                    summary_text = "Untitled chat"
+
+                # Archive chat
                 st.session_state.chat_sessions.append({
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "summary": summary_text,
                     "history": st.session_state.active_chat.copy()
                 })
                 st.session_state.active_chat = []
-                st.rerun()  # Updated here!
-
-    with right:
-        st.markdown("#### Chat History")
-        if not st.session_state.chat_sessions:
-            st.info("No previous chats yet.")
-        else:
-            for i, session in enumerate(reversed(st.session_state.chat_sessions)):
-                ts = session["timestamp"]
-                preview = session["history"][0]["content"][:60] + "..." if session["history"] else "(empty)"
-                if st.button(f"💬 {ts}\n{preview}", key=f"hist_{i}"):
-                    st.session_state.active_chat = session["history"].copy()
-                    st.rerun()  # Updated here!
+                st.rerun()
