@@ -18,6 +18,17 @@ if "selected_leads" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
+# --- Global style adjustments for sidebar look ---
+st.markdown("""
+<style>
+div[data-testid="column"]:first-child {
+    background-color: #fafafa;
+    border-right: 1px solid #eee;
+    padding-right: 12px;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # --- Main content ---
 st.markdown("<h1>Dashboard</h1>", unsafe_allow_html=True)
 
@@ -210,7 +221,7 @@ try:
                                 supabase.table("saved_set_items").delete().eq("set_id", s["id"]).execute()
                                 supabase.table("saved_sets").delete().eq("id", s["id"]).execute()
                                 st.warning("Set deleted.")
-                                st.rerun()  # Updated here!
+                                st.rerun()
 
 except Exception as e:
     st.error(f"Connection failed: {e}")
@@ -232,12 +243,14 @@ with tabs[2]:
 
     # --- Initialize chat sessions ---
     if "chat_sessions" not in st.session_state:
-        st.session_state.chat_sessions = []  # list of dicts: {timestamp, summary, history}
+        st.session_state.chat_sessions = []
     if "active_chat" not in st.session_state:
         st.session_state.active_chat = []
 
-    # --- Layout: Sidebar-style Chat History ---
+    # --- Layout: Sidebar + Chat window ---
     left, right = st.columns([2.2, 5])
+
+    # --- LEFT COLUMN: Chat History ---
     with left:
         st.markdown("### Chats")
 
@@ -247,36 +260,40 @@ with tabs[2]:
             for i, session in enumerate(reversed(st.session_state.chat_sessions)):
                 ts = session["timestamp"]
                 summary = session.get("summary", "Untitled chat")
-                summary_html = (
-                    f"<div style='padding:6px 10px; border-radius:6px; border:1px solid #ddd; "
-                    f"margin-bottom:6px; background-color:#f9f9f9; cursor:pointer;'>"
-                    f"<div style='font-weight:500; color:#222;'>{summary}</div>"
-                    f"<div style='font-size:12px; color:gray;'>{ts}</div></div>"
+                label_html = (
+                    f"<div style='padding:8px 10px;border-radius:6px;border:1px solid #ddd;"
+                    f"margin-bottom:6px;background-color:#f9f9f9;cursor:pointer;'>"
+                    f"<div style='font-weight:500;color:#222;'>{summary}</div>"
+                    f"<div style='font-size:12px;color:gray;'>{ts}</div></div>"
                 )
-                if st.button(summary_html, key=f"hist_{i}", use_container_width=True):
+                st.markdown(label_html, unsafe_allow_html=True)
+                if st.button(f"Open Chat {i}", key=f"chat_open_{i}", label_visibility="collapsed"):
                     st.session_state.active_chat = session["history"].copy()
                     st.rerun()
 
+    # --- RIGHT COLUMN: Active Chat ---
     with right:
         st.markdown("#### Current Chat")
 
-        # Display current chat
+        chat_container = st.container()
         for msg in st.session_state.active_chat:
-            with st.chat_message(msg["role"]):
+            with chat_container.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        # --- Input box ---
-        if prompt := st.chat_input("Ask about collectors, regions, or interests..."):
-            st.session_state.active_chat.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+        # --- Input always pinned to bottom ---
+        user_input = st.chat_input("Ask about collectors, regions, or interests...")
 
-            with st.chat_message("assistant"):
+        if user_input:
+            st.session_state.active_chat.append({"role": "user", "content": user_input})
+            with chat_container.chat_message("user"):
+                st.markdown(user_input)
+
+            with chat_container.chat_message("assistant"):
                 with st.spinner("Consulting database and reasoning..."):
                     try:
                         res = answer_with_context(
                             supabase,
-                            question=prompt,
+                            question=user_input,
                             system_prompt=system_prompt,
                             match_count=10,
                             min_similarity=0.15,
@@ -290,29 +307,27 @@ with tabs[2]:
 
         # --- New Chat Button ---
         if st.session_state.active_chat:
+            st.divider()
             if st.button("New Chat", use_container_width=True):
-                # Generate summary of current chat using OpenAI
                 try:
                     preview_text = " ".join(
                         [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
                     )[:600]
-
                     summary_prompt = (
-                        "Summarize this chat in 3–5 plain words with no emojis, no punctuation, "
-                        "and no stylistic flair. Example: 'Top collectors in Europe'.\n\n"
+                        "Summarize this chat in 3–5 plain words, no emojis or punctuation. "
+                        "Example: 'Top collectors in Europe'.\n\n"
                         f"{preview_text}"
                     )
                     summary_resp = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[{"role": "user", "content": summary_prompt}],
                         max_tokens=20,
-                        temperature=0.5
+                        temperature=0.5,
                     )
                     summary_text = summary_resp.choices[0].message.content.strip()
                 except Exception:
                     summary_text = "Untitled chat"
 
-                # Archive chat
                 st.session_state.chat_sessions.append({
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "summary": summary_text,
