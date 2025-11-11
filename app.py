@@ -88,33 +88,36 @@ tabs = st.tabs(["Search", "Saved Sets", "Chat"])
 def summarize_collector(lead_id: str, combined_notes: str) -> str:
     """
     Summarizes collector intelligence notes into bullet points using OpenAI.
-    Returns a short, factual summary with artists, affiliations, and focus areas.
+    Prints debug info if key or data missing.
     """
-    if not combined_notes.strip():
-        return "—"
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        return "⚠️ Missing OPENAI_API_KEY — add it to your environment."
 
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    prompt = f"""
-    You are an expert art-market researcher creating collector intelligence summaries.
-    Write 4–6 short bullet points summarizing this collector's data factually.
-    Focus on specifics like:
-    - Artists collected or recently purchased
-    - Museum/institutional boards or affiliations
-    - Geography (city or region)
-    - Collecting tendencies or philanthropy
-    - Notable sales, acquisitions, or foundations
-    Avoid adjectives like 'important' or 'renowned'. Keep concise and factual.
-    Example: 'Collects Glenn Ligon and Kara Walker; MoMA trustee; founded Art for Justice Fund.'
-    
-    NOTES:
-    {combined_notes}
-    """
+    if not combined_notes.strip():
+        return "⚠️ No notes found for this lead."
 
     try:
+        client = OpenAI(api_key=key)
+        prompt = f"""
+        You are an expert art-market researcher creating collector intelligence summaries.
+        Write 4–6 short bullet points summarizing this collector's data factually.
+        Focus on specifics like:
+        - Artists collected or recently purchased
+        - Museum/institutional boards or affiliations
+        - Geography (city or region)
+        - Collecting tendencies or philanthropy
+        - Notable sales, acquisitions, or foundations
+        Avoid adjectives like 'important' or 'renowned'.
+        Example: 'Collects Glenn Ligon and Kara Walker; MoMA trustee; founded Art for Justice Fund.'
+
+        NOTES:
+        {combined_notes}
+        """
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You summarize art collectors factually and concisely for gallery intelligence briefs."},
+                {"role": "system", "content": "Summarize art collectors factually and concisely."},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.3,
@@ -122,7 +125,7 @@ def summarize_collector(lead_id: str, combined_notes: str) -> str:
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
-        return f"Error generating summary: {e}"
+        return f"⚠️ OpenAI error: {e}"
 
 # ======================================================================
 # === SEARCH TAB ===
@@ -168,40 +171,27 @@ with tabs[0]:
                         supplements = (
                             supabase.table("leads_supplements")
                             .select("notes")
-                            .eq("lead_id", lead["id"])
+                            .eq("lead_id", str(lead["id"]))  # ensure ID matches type
                             .execute()
-                            .data
-                            or []
+                            .data or []
                         )
                     
-                        # Merge notes
                         base_notes = lead.get("notes") or ""
-                        supplement_notes = "\n\n".join(
-                            [s["notes"] for s in supplements if s and s.get("notes")]
-                        )
+                        supplement_notes = "\n\n".join([s["notes"] for s in supplements if s.get("notes")])
                         combined_notes = (base_notes + ("\n\n" if base_notes and supplement_notes else "") + supplement_notes).strip()
                     
-                        # Default summary
-                        summary = "—"
+                        # 🔍 debug info to see what’s happening
+                        st.caption(f"🧩 Notes length: {len(combined_notes)} | Supplements: {len(supplements)}")
                     
-                        # Use OpenAI if available
-                        if combined_notes and os.getenv("OPENAI_API_KEY"):
-                            summary = summarize_collector(str(lead["id"]), combined_notes)
-                            # Normalize to bullet points
-                            lines = [ln.strip("-• ").strip() for ln in summary.splitlines() if ln.strip()]
-                            if lines and not summary.lstrip().startswith(("-", "•")):
-                                summary = "\n".join(f"- {ln}" for ln in lines)
-                        elif combined_notes:
-                            # Fallback to raw notes
-                            summary = combined_notes[:600]
-                    
+                        summary = summarize_collector(str(lead["id"]), combined_notes)
                         st.markdown("**Notes:**")
                         st.markdown(summary, unsafe_allow_html=True)
                     
                     except Exception as e:
                         st.markdown("**Notes:**")
-                        st.write("Couldn’t generate summary. Showing raw notes.")
+                        st.write(f"⚠️ Failed to summarize: {e}")
                         st.write((lead.get("notes") or "")[:600])
+
 
     # --- Divider ---
     st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
