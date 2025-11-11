@@ -83,6 +83,47 @@ except Exception as e:
 # --- Tabs ---
 tabs = st.tabs(["Search", "Saved Sets", "Chat"])
 
+# --- Cached AI summarization helper ---
+@st.cache_data(show_spinner=False)
+def summarize_collector(lead_id: str, combined_notes: str) -> str:
+    """
+    Summarizes collector intelligence notes into bullet points using OpenAI.
+    Returns a short, factual summary with artists, affiliations, and focus areas.
+    """
+    if not combined_notes.strip():
+        return "—"
+
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    prompt = f"""
+    You are an expert art-market researcher creating collector intelligence summaries.
+    Write 4–6 short bullet points summarizing this collector's data factually.
+    Focus on specifics like:
+    - Artists collected or recently purchased
+    - Museum/institutional boards or affiliations
+    - Geography (city or region)
+    - Collecting tendencies or philanthropy
+    - Notable sales, acquisitions, or foundations
+    Avoid adjectives like 'important' or 'renowned'. Keep concise and factual.
+    Example: 'Collects Glenn Ligon and Kara Walker; MoMA trustee; founded Art for Justice Fund.'
+    
+    NOTES:
+    {combined_notes}
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You summarize art collectors factually and concisely for gallery intelligence briefs."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.3,
+            max_tokens=500,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error generating summary: {e}"
+
 # ======================================================================
 # === SEARCH TAB ===
 # ======================================================================
@@ -121,7 +162,27 @@ with tabs[0]:
                     st.write(f"**Email:** {lead.get('email','—')}")
                     st.write(f"**Tier:** {lead.get('tier','—')}")
                     st.write(f"**Role:** {lead.get('primary_role','—')}")
-                    st.write(f"**Notes:** {lead.get('notes','')[:250]}")
+                    
+# --- Fetch supplements and summarize combined notes ---
+                    try:
+                        supplements = (
+                            supabase.table("leads_supplements")
+                            .select("notes")
+                            .eq("lead_id", lead["id"])
+                            .execute()
+                            .data
+                        )
+                    
+                        combined_notes = (lead.get("notes") or "") + "\n\n"
+                        combined_notes += "\n\n".join([s["notes"] or "" for s in supplements if s.get("notes")])
+                    
+                        summary = summarize_collector(lead["id"], combined_notes)
+                    
+                        st.markdown("**Notes:**")
+                        st.markdown(summary)
+                    except Exception as e:
+                        st.error(f"Failed to summarize notes: {e}")
+
         else:
             st.info("No leads found.")
     else:
