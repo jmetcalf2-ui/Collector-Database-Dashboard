@@ -255,9 +255,9 @@ if "data_page" not in st.session_state:
 
 offset = st.session_state.data_page * per_page
 
-# --- Get total count safely ---
+# --- Get total count safely (no ID column required) ---
 try:
-    total_response = supabase.table("leads").select("id", count="exact").limit(1).execute()
+    total_response = supabase.table("leads").select("*", count="exact").limit(1).execute()
     total_count = getattr(total_response, "count", None) or 0
 except Exception as e:
     st.error(f"Could not fetch total lead count: {e}")
@@ -298,10 +298,8 @@ if data:
         if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
             st.session_state.data_page += 1
             st.experimental_rerun()
-
 else:
     st.info("No data found.")
-
 
 # ======================================================================
 # === SAVED SETS TAB ===
