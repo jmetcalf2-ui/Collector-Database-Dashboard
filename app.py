@@ -308,7 +308,7 @@ with tabs[1]:
                         st.markdown(f"**{name}**")
                         if city or country:
                             location = f"{city}, {country}".strip(", ")
-                            st.caption(f"📍 {location}")
+                            st.caption(f"{location}")
 
                         st.caption(f"{role if role else '—'} | Tier {tier if tier else '—'}")
                         st.write(f"📧 {email}")
