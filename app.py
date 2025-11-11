@@ -297,16 +297,28 @@ with tabs[1]:
                     tier = lead.get("tier", "—")
                     role = lead.get("primary_role", "—")
                     email = lead.get("email", "—")
-                    city = lead.get("city") or ""
-                    country = lead.get("country") or ""
+                    city = (lead.get("city") or "").strip()
+                    country = (lead.get("country") or "").strip()
 
-                    header = f"**{name}**"
-                    subheader = f"{role if role else '—'} | Tier {tier if tier else '—'}"
-                    location = f"{city + ', ' if city else ''}{country}"
+                    # --- Clean up location and label ---
+                    if city and country:
+                        location = f"{city}, {country}"
+                    elif city:
+                        location = city
+                    elif country:
+                        location = country
+                    else:
+                        location = ""
 
-                    with st.expander(f"{name} — {location}"):
-                        st.markdown(header)
-                        st.caption(subheader)
+                    # Only add the dash if there is a location
+                    if location:
+                        expander_label = f"{name} — {location}"
+                    else:
+                        expander_label = name
+
+                    with st.expander(expander_label):
+                        st.markdown(f"**{name}**")
+                        st.caption(f"{role if role else '—'} | Tier {tier if tier else '—'}")
                         st.write(f"📧 {email}")
 
                         # --- Summarization happens ONLY when expanded ---
