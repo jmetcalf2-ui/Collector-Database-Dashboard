@@ -269,42 +269,58 @@ with tabs[1]:
         st.caption(f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total leads")
 
         # --- Fetch leads for current page ---
-        offset = st.session_state.data_page * per_page
-        try:
-            data = (
-                supabase.table("leads")
-                .select("full_name, email, city, country, tier, primary_role, created_at")
-                .order("created_at", desc=True)
-                .range(offset, offset + per_page - 1)
-                .execute()
-                .data
-                or []
-            )
-        except Exception as e:
-            st.error(f"Failed to fetch data: {e}")
-            data = []
+        # --- Pagination setup ---
+per_page = 25
+if "data_page" not in st.session_state:
+    st.session_state.data_page = 0
 
-        # --- Display table ---
-        if data:
-            st.dataframe(
-                data,
-                use_container_width=True,
-                hide_index=True,
-            )
+offset = st.session_state.data_page * per_page
 
-            # --- Pagination buttons ---
-            col_prev, col_next = st.columns([1, 1])
-            with col_prev:
-                if st.button("⬅️ Previous", disabled=st.session_state.data_page == 0):
-                    st.session_state.data_page -= 1
-                    st.rerun()
-            with col_next:
-                if st.button("Next ➡️", disabled=st.session_state.data_page >= total_pages - 1):
-                    st.session_state.data_page += 1
-                    st.rerun()
-        else:
-            st.info("No data found.")
-        
+try:
+    data = (
+        supabase.table("leads")
+        .select("full_name, email, city, country, tier, primary_role, created_at")
+        .order("created_at", desc=True)
+        .range(offset, offset + per_page - 1)
+        .execute()
+        .data
+        or []
+    )
+except Exception as e:
+    st.error(f"Failed to fetch data: {e}")
+    data = []
+
+# --- Display table ---
+if data:
+    st.dataframe(
+        data,
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    # --- Pagination buttons (no emojis) ---
+    total_count = (
+        supabase.table("leads").select("id", count="exact").execute().count or 0
+    )
+    total_pages = max(1, (total_count + per_page - 1) // per_page)
+
+    st.caption(f"Page {st.session_state.data_page + 1} of {total_pages}")
+
+    col_prev, col_next = st.columns(2)
+
+    with col_prev:
+        if st.button("Previous", disabled=st.session_state.data_page == 0):
+            st.session_state.data_page -= 1
+            st.experimental_rerun()
+
+    with col_next:
+        if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
+            st.session_state.data_page += 1
+            st.experimental_rerun()
+
+else:
+    st.info("No data found.")
+
 # ======================================================================
 # === SAVED SETS TAB ===
 # ======================================================================
