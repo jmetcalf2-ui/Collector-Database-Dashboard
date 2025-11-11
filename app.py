@@ -308,7 +308,7 @@ with tabs[1]:
 # ======================================================================
 # === SAVED SETS TAB ===
 # ======================================================================
-with tabs[1]:
+with tabs[2]:
     st.markdown("## Saved Sets")
     if not supabase:
         st.warning("Database unavailable.")
@@ -325,7 +325,7 @@ with tabs[1]:
 # ======================================================================
 # === CHAT TAB ===
 # ======================================================================
-with tabs[2]:
+with tabs[3]:
 
     # --- System prompt setup ---
     system_prompt_path = Path("prompts/system_prompt.md")
