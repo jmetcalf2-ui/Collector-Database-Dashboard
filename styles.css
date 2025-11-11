@@ -10,21 +10,23 @@ section[data-testid="stSidebar"] {
   display: none !important;
 }
 
+/* --- Center main dashboard content nicely --- */
 .block-container {
+  max-width: 1400px !important;       /* limit content width */
+  margin: 0 auto !important;          /* center horizontally */
   padding-top: 2rem !important;
   padding-bottom: 3rem !important;
-  padding-left: 2rem !important;
-  padding-right: 2rem !important;
-  max-width: 100% !important;
-  margin: 0 auto !important;
+  padding-left: 4rem !important;      /* roughly 1 inch (~96px) */
+  padding-right: 4rem !important;     /* roughly 1 inch (~96px) */
 }
 
-/* Ensure main app container stretches across width */
+/* Ensure main container stays centered and clean */
 main[data-testid="stAppViewContainer"] {
+  display: flex;
+  justify-content: center;
+  background-color: #ffffff !important;
   padding-left: 0 !important;
   padding-right: 0 !important;
-  margin: 0 auto !important;
-  background-color: #ffffff !important;
 }
 
 /* Typography */
