@@ -249,14 +249,11 @@ with tabs[0]:
 # === CONTACTS TAB ===
 # ======================================================================
 with tabs[1]:
-    st.markdown("## Contacts")
-
     # --- Create a new contact form ---
     with st.expander("Create a Contact", expanded=False):
         with st.form("create_contact_form"):
             st.markdown("Enter contact details to add a new record to the leads table:")
 
-            # Core lead fields — adjust these to match your Supabase schema
             full_name = st.text_input("Full Name")
             email = st.text_input("Email")
             primary_role = st.text_input("Primary Role")
@@ -264,6 +261,37 @@ with tabs[1]:
             country = st.text_input("Country")
             tier = st.selectbox("Tier", ["A", "B", "C", "—"], index=3)
             notes = st.text_area("Notes", height=100)
+
+            submitted = st.form_submit_button("Create Contact")
+
+            if submitted:
+                if not full_name or not email:
+                    st.warning("Please provide at least a name and email.")
+                else:
+                    try:
+                        response = supabase.table("leads").insert({
+                            "full_name": full_name.strip(),
+                            "email": email.strip(),
+                            "primary_role": primary_role.strip() if primary_role else None,
+                            "city": city.strip() if city else None,
+                            "country": country.strip() if country else None,
+                            "tier": None if tier == "—" else tier,
+                            "notes": notes.strip() if notes else None,
+                        }).execute()
+
+                        if getattr(response, "status_code", 400) < 300:
+                            st.success(f"{full_name} has been added to your contacts.")
+                            st.rerun()  # instantly refresh to show the new contact
+                        else:
+                            st.error(f"Insert failed: {response}")
+                    except Exception as e:
+                        st.error(f"Error creating contact: {e}")
+
+    # --- Add spacing before contacts list ---
+    st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
+
+    st.markdown("## Contacts")
+
 
             # Submission button
             submitted = st.form_submit_button("Create Contact")
