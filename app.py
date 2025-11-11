@@ -161,7 +161,7 @@ with tabs[0]:
         if data:
             st.write(f"Found {len(data)} results")
             for lead in data:
-                with st.expander(f"{lead.get('full_name', 'Unnamed')} — {lead.get('city', 'Unknown')}"):
+                with st.expander(f"{lead.get('full_name', 'Unnamed')}{' — ' + lead['city'] if lead.get('city') else ''}"):
                     st.write(f"**Email:** {lead.get('email','—')}")
                     st.write(f"**Tier:** {lead.get('tier','—')}")
                     st.write(f"**Role:** {lead.get('primary_role','—')}")
