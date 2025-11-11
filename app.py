@@ -306,7 +306,7 @@ with tabs[1]:
 
         offset = st.session_state.data_page * per_page
 
-        # --- Count total leads (safe) ---
+        # --- Count total leads ---
         try:
             total_response = supabase.table("leads").select("*", count="exact").limit(1).execute()
             total_count = getattr(total_response, "count", None) or 0
@@ -397,20 +397,28 @@ with tabs[1]:
                                 st.markdown("**Notes:**")
                                 st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
 
+                        # --- Delete Contact Button ---
                         with del_col:
                             if st.button("Delete", key=f"del_{lead_key}"):
+                                st.session_state[f"confirm_delete_{lead_key}"] = True
+
+                            if st.session_state.get(f"confirm_delete_{lead_key}", False):
                                 st.warning(f"Are you sure you want to delete {name}?")
-                                confirm_col1, confirm_col2 = st.columns([1, 1])
-                                with confirm_col1:
-                                    if st.button("Yes, delete", key=f"confirm_del_{lead_key}"):
-                                        try:
-                                            supabase.table("leads").delete().eq("lead_id", lead_key).execute()
-                                            st.success(f"{name} has been deleted.")
-                                            st.rerun()
-                                        except Exception as e:
-                                            st.error(f"Error deleting contact: {e}")
-                                with confirm_col2:
-                                    st.button("Cancel", key=f"cancel_del_{lead_key}")
+                                confirm = st.button("Yes, delete", key=f"confirm_del_{lead_key}")
+                                cancel = st.button("Cancel", key=f"cancel_del_{lead_key}")
+
+                                if confirm:
+                                    try:
+                                        supabase.table("leads").delete().eq("lead_id", lead_key).execute()
+                                        st.success(f"{name} has been deleted.")
+                                        st.session_state[f"confirm_delete_{lead_key}"] = False
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error deleting contact: {e}")
+
+                                if cancel:
+                                    st.session_state[f"confirm_delete_{lead_key}"] = False
+                                    st.experimental_rerun()
 
             # --- Pagination controls ---
             st.markdown("---")
@@ -427,6 +435,7 @@ with tabs[1]:
                     st.rerun()
         else:
             st.info("No leads found.")
+
 
 
 # ======================================================================
