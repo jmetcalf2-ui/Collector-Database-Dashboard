@@ -296,11 +296,11 @@ with tabs[1]:
         with col_prev:
             if st.button("Previous", disabled=st.session_state.data_page == 0):
                 st.session_state.data_page -= 1
-                st.experimental_rerun()
+                st.rerun()
         with col_next:
             if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
                 st.session_state.data_page += 1
-                st.experimental_rerun()
+                st.rerun()
     else:
         st.info("No data found.")
 
