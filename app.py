@@ -300,54 +300,60 @@ with tabs[1]:
                     city = (lead.get("city") or "").strip()
                     country = (lead.get("country") or "").strip()
 
-                    # --- Expander label (name only) ---
                     expander_label = name
+                    lead_key = str(lead["lead_id"])
+                    summary_key = f"summary_{lead_key}"
 
                     with st.expander(expander_label):
-                        # --- Header info ---
                         st.markdown(f"**{name}**")
+
+                        # Show location if available
                         if city or country:
                             location = f"{city}, {country}".strip(", ")
-                            st.caption(f"{location}")
+                            st.caption(location)
 
                         st.caption(f"{role if role else '—'} | Tier {tier if tier else '—'}")
-                        st.write(f"📧 {email}")
+                        st.write(email)
 
-                        # --- Summarization happens ONLY when expanded ---
-                        if st.button(f"Summarize {name}", key=f"sum_{lead['lead_id']}"):
-                            with st.spinner("Summarizing notes..."):
-                                try:
-                                    supplements = (
-                                        supabase.table("leads_supplements")
-                                        .select("notes")
-                                        .eq("lead_id", str(lead["lead_id"]))
-                                        .execute()
-                                        .data
-                                        or []
-                                    )
+                        # --- Summarize button appears only if summary doesn't exist ---
+                        if summary_key not in st.session_state:
+                            if st.button(f"Summarize {name}", key=f"sum_{lead_key}"):
+                                with st.spinner("Summarizing notes..."):
+                                    try:
+                                        supplements = (
+                                            supabase.table("leads_supplements")
+                                            .select("notes")
+                                            .eq("lead_id", lead_key)
+                                            .execute()
+                                            .data
+                                            or []
+                                        )
 
-                                    base_notes = lead.get("notes") or ""
-                                    supplement_notes = "\n\n".join(
-                                        (s.get("notes") or "").strip()
-                                        for s in supplements
-                                        if isinstance(s, dict)
-                                    )
-                                    combined_notes = (
-                                        base_notes
-                                        + ("\n\n" if base_notes and supplement_notes else "")
-                                        + supplement_notes
-                                    ).strip()
+                                        base_notes = lead.get("notes") or ""
+                                        supplement_notes = "\n\n".join(
+                                            (s.get("notes") or "").strip()
+                                            for s in supplements
+                                            if isinstance(s, dict)
+                                        )
+                                        combined_notes = (
+                                            base_notes
+                                            + ("\n\n" if base_notes and supplement_notes else "")
+                                            + supplement_notes
+                                        ).strip()
 
-                                    summary = summarize_collector(str(lead["lead_id"]), combined_notes)
-                                    st.markdown("**Notes:**")
-                                    st.markdown(summary, unsafe_allow_html=True)
-                                except Exception as e:
-                                    st.error(f"Summarization failed: {e}")
+                                        summary = summarize_collector(lead_key, combined_notes)
+                                        st.session_state[summary_key] = summary
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Summarization failed: {e}")
+
+                        # --- Display summary if already generated ---
+                        if summary_key in st.session_state:
+                            st.markdown("**Notes:**")
+                            st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
 
             # --- Pagination controls ---
             st.markdown("---")
-
-            # Center the buttons and make them sit side-by-side
             col_space_left, col_prev, col_next, col_space_right = st.columns([2, 1, 1, 2])
 
             with col_prev:
