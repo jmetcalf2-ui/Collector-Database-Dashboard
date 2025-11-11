@@ -46,6 +46,16 @@ h1, h2, h3 {
   margin-top: 1.2rem;
 }
 
+/* Create Contact form styling */
+div[data-testid="stExpander"] {
+  border: 1px solid #eee !important;
+  border-radius: 12px !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.03) !important;
+  background: #fff !important;
+  padding: 4px 6px !important;
+  margin-bottom: 1.5rem !important;
+}
+
 /* Badges / tags */
 .badge {
   display: inline-block;
