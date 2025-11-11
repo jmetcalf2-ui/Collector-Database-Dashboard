@@ -276,7 +276,7 @@ with tabs[1]:
         try:
             leads = (
                 supabase.table("leads")
-                .select("id, full_name, email, tier, primary_role, city, country, notes")
+                .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
                 .order("created_at", desc=True)
                 .range(offset, offset + per_page - 1)
                 .execute()
@@ -304,7 +304,7 @@ with tabs[1]:
                     st.write(f"**Role:** {role}")
 
                     try:
-                        lead_pk = lead.get("id")
+                        lead_pk = lead.get("lead_id")
                         supplements = (
                             supabase.table("leads_supplements")
                             .select("notes")
