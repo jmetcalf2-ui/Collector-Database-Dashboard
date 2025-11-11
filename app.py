@@ -248,58 +248,61 @@ with tabs[0]:
 # ======================================================================
 # === DATA TAB ===
 # ======================================================================
-# --- Pagination setup ---
-per_page = 25
-if "data_page" not in st.session_state:
-    st.session_state.data_page = 0
+with tabs[1]:
+    st.markdown("## Data Overview")
 
-offset = st.session_state.data_page * per_page
+    # --- Pagination setup ---
+    per_page = 25
+    if "data_page" not in st.session_state:
+        st.session_state.data_page = 0
 
-# --- Get total count safely (no ID column required) ---
-try:
-    total_response = supabase.table("leads").select("*", count="exact").limit(1).execute()
-    total_count = getattr(total_response, "count", None) or 0
-except Exception as e:
-    st.error(f"Could not fetch total lead count: {e}")
-    total_count = 0
+    offset = st.session_state.data_page * per_page
 
-total_pages = max(1, (total_count + per_page - 1) // per_page)
+    # --- Get total count safely (no ID column required) ---
+    try:
+        total_response = supabase.table("leads").select("*", count="exact").limit(1).execute()
+        total_count = getattr(total_response, "count", None) or 0
+    except Exception as e:
+        st.error(f"Could not fetch total lead count: {e}")
+        total_count = 0
 
-# --- Fetch paginated data ---
-try:
-    data_response = (
-        supabase.table("leads")
-        .select("full_name, email, city, country, tier, primary_role, created_at")
-        .order("created_at", desc=True)
-        .range(offset, offset + per_page - 1)
-        .execute()
-    )
-    data = getattr(data_response, "data", []) or []
-except Exception as e:
-    st.error(f"Failed to fetch data: {e}")
-    data = []
+    total_pages = max(1, (total_count + per_page - 1) // per_page)
 
-# --- Display results ---
-if data:
-    st.dataframe(
-        data,
-        use_container_width=True,
-        hide_index=True,
-    )
+    # --- Fetch paginated data ---
+    try:
+        data_response = (
+            supabase.table("leads")
+            .select("full_name, email, city, country, tier, primary_role, created_at")
+            .order("created_at", desc=True)
+            .range(offset, offset + per_page - 1)
+            .execute()
+        )
+        data = getattr(data_response, "data", []) or []
+    except Exception as e:
+        st.error(f"Failed to fetch data: {e}")
+        data = []
 
-    st.caption(f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total leads")
+    # --- Display results ---
+    if data:
+        st.dataframe(
+            data,
+            use_container_width=True,
+            hide_index=True,
+        )
 
-    col_prev, col_next = st.columns([1, 1])
-    with col_prev:
-        if st.button("Previous", disabled=st.session_state.data_page == 0):
-            st.session_state.data_page -= 1
-            st.experimental_rerun()
-    with col_next:
-        if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
-            st.session_state.data_page += 1
-            st.experimental_rerun()
-else:
-    st.info("No data found.")
+        st.caption(f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total leads")
+
+        col_prev, col_next = st.columns([1, 1])
+        with col_prev:
+            if st.button("Previous", disabled=st.session_state.data_page == 0):
+                st.session_state.data_page -= 1
+                st.experimental_rerun()
+        with col_next:
+            if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
+                st.session_state.data_page += 1
+                st.experimental_rerun()
+    else:
+        st.info("No data found.")
 
 # ======================================================================
 # === SAVED SETS TAB ===
