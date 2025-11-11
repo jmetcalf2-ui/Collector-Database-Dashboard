@@ -287,7 +287,7 @@ with tabs[1]:
                         )
                         if getattr(response, "status_code", 400) < 300:
                             st.success(f"{full_name} has been added to your contacts.")
-                            st.rerun()  # refresh to show new contact on the list
+                            st.rerun()
                         else:
                             st.error(f"Insert failed: {response}")
                     except Exception as e:
@@ -336,7 +336,7 @@ with tabs[1]:
         if leads:
             cols = st.columns(2)
             for i, lead in enumerate(leads):
-                col = cols[i % 2]  # alternate columns for grid layout
+                col = cols[i % 2]
                 with col:
                     name = lead.get("full_name", "Unnamed")
                     tier_val = lead.get("tier", "—")
@@ -352,7 +352,6 @@ with tabs[1]:
                     with st.expander(expander_label):
                         st.markdown(f"**{name}**")
 
-                        # Show location if available
                         if city or country:
                             location = f"{city}, {country}".strip(", ")
                             st.caption(location)
@@ -360,42 +359,58 @@ with tabs[1]:
                         st.caption(f"{role if role else '—'} | Tier {tier_val if tier_val else '—'}")
                         st.write(email_val)
 
-                        # --- Summarize button appears only if summary doesn't exist ---
-                        if summary_key not in st.session_state:
-                            if st.button(f"Summarize {name}", key=f"sum_{lead_key}"):
-                                with st.spinner("Summarizing notes..."):
-                                    try:
-                                        supplements = (
-                                            supabase.table("leads_supplements")
-                                            .select("notes")
-                                            .eq("lead_id", lead_key)
-                                            .execute()
-                                            .data
-                                            or []
-                                        )
+                        # --- Row with Summarize and Delete buttons ---
+                        sum_col, del_col = st.columns([3, 1])
 
-                                        base_notes = lead.get("notes") or ""
-                                        supplement_notes = "\n\n".join(
-                                            (s.get("notes") or "").strip()
-                                            for s in supplements
-                                            if isinstance(s, dict)
-                                        )
-                                        combined_notes = (
-                                            base_notes
-                                            + ("\n\n" if base_notes and supplement_notes else "")
-                                            + supplement_notes
-                                        ).strip()
+                        with sum_col:
+                            if summary_key not in st.session_state:
+                                if st.button(f"Summarize {name}", key=f"sum_{lead_key}"):
+                                    with st.spinner("Summarizing notes..."):
+                                        try:
+                                            supplements = (
+                                                supabase.table("leads_supplements")
+                                                .select("notes")
+                                                .eq("lead_id", lead_key)
+                                                .execute()
+                                                .data
+                                                or []
+                                            )
 
-                                        summary = summarize_collector(lead_key, combined_notes)
-                                        st.session_state[summary_key] = summary
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"Summarization failed: {e}")
+                                            base_notes = lead.get("notes") or ""
+                                            supplement_notes = "\n\n".join(
+                                                (s.get("notes") or "").strip()
+                                                for s in supplements
+                                                if isinstance(s, dict)
+                                            )
+                                            combined_notes = (
+                                                base_notes
+                                                + ("\n\n" if base_notes and supplement_notes else "")
+                                                + supplement_notes
+                                            ).strip()
 
-                        # --- Display summary if already generated ---
-                        if summary_key in st.session_state:
-                            st.markdown("**Notes:**")
-                            st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+                                            summary = summarize_collector(lead_key, combined_notes)
+                                            st.session_state[summary_key] = summary
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Summarization failed: {e}")
+                            else:
+                                st.markdown("**Notes:**")
+                                st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+
+                        with del_col:
+                            if st.button("Delete", key=f"del_{lead_key}"):
+                                st.warning(f"Are you sure you want to delete {name}?")
+                                confirm_col1, confirm_col2 = st.columns([1, 1])
+                                with confirm_col1:
+                                    if st.button("Yes, delete", key=f"confirm_del_{lead_key}"):
+                                        try:
+                                            supabase.table("leads").delete().eq("lead_id", lead_key).execute()
+                                            st.success(f"{name} has been deleted.")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Error deleting contact: {e}")
+                                with confirm_col2:
+                                    st.button("Cancel", key=f"cancel_del_{lead_key}")
 
             # --- Pagination controls ---
             st.markdown("---")
@@ -412,6 +427,7 @@ with tabs[1]:
                     st.rerun()
         else:
             st.info("No leads found.")
+
 
 # ======================================================================
 # === SAVED SETS TAB ===
