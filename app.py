@@ -297,18 +297,9 @@ with tabs[1]:
                     tier = lead.get("tier", "—")
                     role = lead.get("primary_role", "—")
                     email = lead.get("email", "—")
-                    city = (lead.get("city") or "").strip()
-                    country = (lead.get("country") or "").strip()
 
-                    # --- Clean up location and label ---
-                    if city and country:
-                        location = f"{city}, {country}"
-                    elif city:
-                        location = city
-                    elif country:
-                        location = country
-                    else:
-                        location = ""
+                    # --- Expander label (name only, no location) ---
+                    expander_label = name
 
                     with st.expander(expander_label):
                         st.markdown(f"**{name}**")
