@@ -319,7 +319,7 @@ with tabs[1]:
                     with st.expander(expander_label):
                         st.markdown(f"**{name}**")
                         st.caption(f"{role if role else '—'} | Tier {tier if tier else '—'}")
-                        st.write(f"📧 {email}")
+                        st.write(f"{email}")
 
                         # --- Summarization happens ONLY when expanded ---
                         if st.button(f"Summarize {name}", key=f"sum_{lead['lead_id']}"):
