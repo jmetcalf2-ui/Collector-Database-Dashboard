@@ -297,14 +297,21 @@ with tabs[1]:
                     tier = lead.get("tier", "—")
                     role = lead.get("primary_role", "—")
                     email = lead.get("email", "—")
+                    city = (lead.get("city") or "").strip()
+                    country = (lead.get("country") or "").strip()
 
-                    # --- Expander label (name only, no location) ---
+                    # --- Expander label (name only) ---
                     expander_label = name
 
                     with st.expander(expander_label):
+                        # --- Header info ---
                         st.markdown(f"**{name}**")
+                        if city or country:
+                            location = f"{city}, {country}".strip(", ")
+                            st.caption(f"📍 {location}")
+
                         st.caption(f"{role if role else '—'} | Tier {tier if tier else '—'}")
-                        st.write(f"{email}")
+                        st.write(f"📧 {email}")
 
                         # --- Summarization happens ONLY when expanded ---
                         if st.button(f"Summarize {name}", key=f"sum_{lead['lead_id']}"):
