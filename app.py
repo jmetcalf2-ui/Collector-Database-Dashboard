@@ -254,6 +254,7 @@ with tabs[1]:
         with st.form("create_contact_form"):
             st.markdown("Enter contact details to add a new record to the leads table:")
 
+            # Core lead fields — adjust to your Supabase schema
             full_name = st.text_input("Full Name")
             email = st.text_input("Email")
             primary_role = st.text_input("Primary Role")
@@ -262,26 +263,29 @@ with tabs[1]:
             tier = st.selectbox("Tier", ["A", "B", "C", "—"], index=3)
             notes = st.text_area("Notes", height=100)
 
+            # Submit
             submitted = st.form_submit_button("Create Contact")
-
             if submitted:
                 if not full_name or not email:
                     st.warning("Please provide at least a name and email.")
                 else:
                     try:
-                        response = supabase.table("leads").insert({
-                            "full_name": full_name.strip(),
-                            "email": email.strip(),
-                            "primary_role": primary_role.strip() if primary_role else None,
-                            "city": city.strip() if city else None,
-                            "country": country.strip() if country else None,
-                            "tier": None if tier == "—" else tier,
-                            "notes": notes.strip() if notes else None,
-                        }).execute()
-
+                        response = (
+                            supabase.table("leads")
+                            .insert({
+                                "full_name": full_name.strip(),
+                                "email": email.strip(),
+                                "primary_role": primary_role.strip() if primary_role else None,
+                                "city": city.strip() if city else None,
+                                "country": country.strip() if country else None,
+                                "tier": None if tier == "—" else tier,
+                                "notes": notes.strip() if notes else None,
+                            })
+                            .execute()
+                        )
                         if getattr(response, "status_code", 400) < 300:
                             st.success(f"{full_name} has been added to your contacts.")
-                            st.rerun()  # instantly refresh to show the new contact
+                            st.rerun()  # refresh to show new contact on the list
                         else:
                             st.error(f"Insert failed: {response}")
                     except Exception as e:
@@ -291,33 +295,6 @@ with tabs[1]:
     st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
 
     st.markdown("## Contacts")
-
-
-            # Submission button
-            submitted = st.form_submit_button("Create Contact")
-
-            if submitted:
-                if not full_name or not email:
-                    st.warning("Please provide at least a name and email.")
-                else:
-                    try:
-                        # Insert into Supabase
-                        response = supabase.table("leads").insert({
-                            "full_name": full_name.strip(),
-                            "email": email.strip(),
-                            "primary_role": primary_role.strip() if primary_role else None,
-                            "city": city.strip() if city else None,
-                            "country": country.strip() if country else None,
-                            "tier": None if tier == "—" else tier,
-                            "notes": notes.strip() if notes else None,
-                        }).execute()
-
-                        if getattr(response, "status_code", 400) < 300:
-                            st.success(f"{full_name} has been added to your contacts.")
-                        else:
-                            st.error(f"Insert failed: {response}")
-                    except Exception as e:
-                        st.error(f"Error creating contact: {e}")
 
     if not supabase:
         st.warning("Database unavailable.")
@@ -362,9 +339,9 @@ with tabs[1]:
                 col = cols[i % 2]  # alternate columns for grid layout
                 with col:
                     name = lead.get("full_name", "Unnamed")
-                    tier = lead.get("tier", "—")
+                    tier_val = lead.get("tier", "—")
                     role = lead.get("primary_role", "—")
-                    email = lead.get("email", "—")
+                    email_val = lead.get("email", "—")
                     city = (lead.get("city") or "").strip()
                     country = (lead.get("country") or "").strip()
 
@@ -380,8 +357,8 @@ with tabs[1]:
                             location = f"{city}, {country}".strip(", ")
                             st.caption(location)
 
-                        st.caption(f"{role if role else '—'} | Tier {tier if tier else '—'}")
-                        st.write(email)
+                        st.caption(f"{role if role else '—'} | Tier {tier_val if tier_val else '—'}")
+                        st.write(email_val)
 
                         # --- Summarize button appears only if summary doesn't exist ---
                         if summary_key not in st.session_state:
