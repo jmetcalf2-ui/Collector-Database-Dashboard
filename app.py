@@ -249,7 +249,7 @@ with tabs[0]:
 # === DATA TAB ===
 # ======================================================================
 with tabs[1]:
-    st.markdown("## Contacts Overview")
+    st.markdown("## Contacts")
 
     if not supabase:
         st.warning("Database unavailable.")
