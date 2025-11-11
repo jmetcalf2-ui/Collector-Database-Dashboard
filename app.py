@@ -131,7 +131,7 @@ with tabs[0]:
     st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
 
     # --- Semantic Search Section ---
-    st.markdown("### Semantic Search (Notes & Content)")
+    st.markdown("### Semantic Search")
     
     query_text = st.text_input(
         "Describe the type of collector or interest you’re looking for",
