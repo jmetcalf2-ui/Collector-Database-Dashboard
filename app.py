@@ -72,13 +72,13 @@ div[data-testid="stButton"] > button.chat-btn {
 # --- Main content ---
 st.markdown("<h1>Dashboard</h1>", unsafe_allow_html=True)
 
-# --- Connect Supabase ---
+# --- Connect Supabase (silent connect, no banner) ---
 try:
     supabase = get_supabase()
-    st.success("Connected to Supabase")
 except Exception as e:
-    st.error(f"Connection failed: {e}")
+    st.error(f"⚠️ Supabase connection failed: {e}")
     supabase = None
+
 
 # --- Tabs ---
 tabs = st.tabs(["Search", "Data", "Saved Sets", "Chat"])
