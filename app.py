@@ -165,33 +165,48 @@ with tabs[0]:
                     st.write(f"**Email:** {lead.get('email','—')}")
                     st.write(f"**Tier:** {lead.get('tier','—')}")
                     st.write(f"**Role:** {lead.get('primary_role','—')}")
-                    
+
                     # --- Fetch supplements and summarize combined notes ---
                     try:
+                        # ✅ Determine correct primary key (lead_id or id)
+                        lead_pk = lead.get("lead_id") or lead.get("id")
+                        if not lead_pk:
+                            st.error("Lead row missing both 'lead_id' and 'id'.")
+                            continue
+
+                        # ✅ Fetch supplements for this lead
                         supplements = (
                             supabase.table("leads_supplements")
                             .select("notes")
-                            .eq("lead_id", str(lead["id"]))  # ensure ID matches type
+                            .eq("lead_id", str(lead_pk))
                             .execute()
-                            .data or []
+                            .data
+                            or []
                         )
-                    
+
+                        # ✅ Merge notes safely
                         base_notes = lead.get("notes") or ""
-                        supplement_notes = "\n\n".join([s["notes"] for s in supplements if s.get("notes")])
-                        combined_notes = (base_notes + ("\n\n" if base_notes and supplement_notes else "") + supplement_notes).strip()
-                    
-                        # 🔍 debug info to see what’s happening
+                        supplement_notes = "\n\n".join(
+                            (s.get("notes") or "").strip() for s in supplements if isinstance(s, dict)
+                        )
+                        combined_notes = (
+                            base_notes
+                            + ("\n\n" if base_notes and supplement_notes else "")
+                            + supplement_notes
+                        ).strip()
+
+                        # 🔍 Debug info
                         st.caption(f"🧩 Notes length: {len(combined_notes)} | Supplements: {len(supplements)}")
-                    
-                        summary = summarize_collector(str(lead["id"]), combined_notes)
+
+                        # ✅ Summarize using OpenAI
+                        summary = summarize_collector(str(lead_pk), combined_notes)
                         st.markdown("**Notes:**")
                         st.markdown(summary, unsafe_allow_html=True)
-                    
+
                     except Exception as e:
                         st.markdown("**Notes:**")
                         st.write(f"⚠️ Failed to summarize: {e}")
                         st.write((lead.get("notes") or "")[:600])
-
 
     # --- Divider ---
     st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
