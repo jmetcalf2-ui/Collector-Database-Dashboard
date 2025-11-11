@@ -245,55 +245,6 @@ with tabs[0]:
         else:
             st.info("No leads found.")
 
-    # --- Divider ---
-    st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
-
-    # --- Semantic Search Section ---
-    st.markdown("### Semantic Search")
-    
-    query_text = st.text_input(
-        "Describe the type of collector or interest you’re looking for",
-        placeholder="e.g. Minimalism collectors or those following Bruce Nauman",
-        key="semantic_query_text",
-    )
-    
-    col_a, col_b = st.columns([2, 1])
-    with col_a:
-        top_k = st.slider("Number of results", 5, 100, 25, key="semantic_top_k")
-    with col_b:
-        min_similarity = st.slider("Minimum similarity", 0.0, 1.0, 0.15, 0.01, key="semantic_similarity")
-    
-    run_semantic = st.button("Run Semantic Search", key="semantic_search_button")
-    
-    if run_semantic and query_text.strip():
-        with st.spinner("Running semantic search..."):
-            try:
-                client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-    
-                emb = client.embeddings.create(model=model, input=query_text).data[0].embedding
-    
-                res = supabase.rpc(
-                    "rpc_semantic_search_leads_supplements",
-                    {
-                        "query_embedding": list(map(float, emb)),
-                        "match_count": top_k,
-                        "min_score": min_similarity,
-                    },
-                ).execute()
-    
-                results = res.data or []
-                if results:
-                    st.success(f"Found {len(results)} semantic matches")
-                    st.dataframe(results, use_container_width=True, hide_index=True)
-                else:
-                    st.info("No semantic matches found.")
-            except Exception as e:
-                st.error(f"Semantic search failed: {e}")
-    else:
-        st.caption("Enter a description and click **Run Semantic Search** to start.")
-
-
 # ======================================================================
 # === SAVED SETS TAB ===
 # ======================================================================
