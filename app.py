@@ -354,17 +354,32 @@ with tabs[1]:
 
             # --- Pagination controls ---
             st.markdown("---")
-            col_prev, col_next = st.columns([1, 1])
+            
+            # Center the buttons and make them sit side-by-side
+            col_space_left, col_prev, col_next, col_space_right = st.columns([2, 1, 1, 2])
+            
             with col_prev:
-                if st.button("Previous", disabled=st.session_state.data_page == 0):
+                if st.button("Previous", use_container_width=True, disabled=st.session_state.data_page == 0):
                     st.session_state.data_page -= 1
                     st.rerun()
+            
             with col_next:
-                if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
+                if st.button("Next", use_container_width=True, disabled=st.session_state.data_page >= total_pages - 1):
                     st.session_state.data_page += 1
                     st.rerun()
-        else:
-            st.info("No leads found.")
+            # --- Pagination controls ---
+                        st.markdown("---")
+                        col_prev, col_next = st.columns([1, 1])
+                        with col_prev:
+                            if st.button("Previous", disabled=st.session_state.data_page == 0):
+                                st.session_state.data_page -= 1
+                                st.rerun()
+                        with col_next:
+                            if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
+                                st.session_state.data_page += 1
+                                st.rerun()
+                    else:
+                        st.info("No leads found.")
 
 # ======================================================================
 # === SAVED SETS TAB ===
