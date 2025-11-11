@@ -255,13 +255,13 @@ with tabs[1]:
         st.warning("Database unavailable.")
     else:
         # --- Pagination setup ---
-        per_page = 25
+        per_page = 20
         if "data_page" not in st.session_state:
             st.session_state.data_page = 0
 
         offset = st.session_state.data_page * per_page
 
-        # --- Count total leads ---
+        # --- Count total leads (safe) ---
         try:
             total_response = supabase.table("leads").select("*", count="exact").limit(1).execute()
             total_count = getattr(total_response, "count", None) or 0
@@ -287,52 +287,61 @@ with tabs[1]:
             st.error(f"Failed to fetch leads: {e}")
             leads = []
 
-        # --- Display leads like search results ---
+        # --- Display leads in grid ---
         if leads:
-            for lead in leads:
-                name = lead.get("full_name", "Unnamed")
-                tier = lead.get("tier", "—")
-                role = lead.get("primary_role", "—")
-                email = lead.get("email", "—")
-                city = lead.get("city") or ""
-                country = lead.get("country") or ""
+            cols = st.columns(2)
+            for i, lead in enumerate(leads):
+                col = cols[i % 2]  # alternate columns for grid layout
+                with col:
+                    name = lead.get("full_name", "Unnamed")
+                    tier = lead.get("tier", "—")
+                    role = lead.get("primary_role", "—")
+                    email = lead.get("email", "—")
+                    city = lead.get("city") or ""
+                    country = lead.get("country") or ""
 
-                label = f"{name} — {city if city else ''}{', ' + country if country else ''}"
-                with st.expander(label):
-                    st.write(f"**Email:** {email}")
-                    st.write(f"**Tier:** {tier}")
-                    st.write(f"**Role:** {role}")
+                    header = f"**{name}**"
+                    subheader = f"{role if role else '—'} | Tier {tier if tier else '—'}"
+                    location = f"{city + ', ' if city else ''}{country}"
 
-                    try:
-                        lead_pk = lead.get("lead_id")
-                        supplements = (
-                            supabase.table("leads_supplements")
-                            .select("notes")
-                            .eq("lead_id", str(lead_pk))
-                            .execute()
-                            .data
-                            or []
-                        )
+                    with st.expander(f"{name} — {location}"):
+                        st.markdown(header)
+                        st.caption(subheader)
+                        st.write(f"📧 {email}")
 
-                        base_notes = lead.get("notes") or ""
-                        supplement_notes = "\n\n".join(
-                            (s.get("notes") or "").strip() for s in supplements if isinstance(s, dict)
-                        )
-                        combined_notes = (
-                            base_notes
-                            + ("\n\n" if base_notes and supplement_notes else "")
-                            + supplement_notes
-                        ).strip()
+                        # --- Summarization happens ONLY when expanded ---
+                        if st.button(f"Summarize {name}", key=f"sum_{lead['lead_id']}"):
+                            with st.spinner("Summarizing notes..."):
+                                try:
+                                    supplements = (
+                                        supabase.table("leads_supplements")
+                                        .select("notes")
+                                        .eq("lead_id", str(lead["lead_id"]))
+                                        .execute()
+                                        .data
+                                        or []
+                                    )
 
-                        summary = summarize_collector(str(lead_pk), combined_notes)
-                        st.markdown("**Notes:**")
-                        st.markdown(summary, unsafe_allow_html=True)
-                    except Exception as e:
-                        st.markdown("**Notes:**")
-                        st.write(f"⚠️ Failed to summarize: {e}")
-                        st.write((lead.get("notes") or "")[:600])
+                                    base_notes = lead.get("notes") or ""
+                                    supplement_notes = "\n\n".join(
+                                        (s.get("notes") or "").strip()
+                                        for s in supplements
+                                        if isinstance(s, dict)
+                                    )
+                                    combined_notes = (
+                                        base_notes
+                                        + ("\n\n" if base_notes and supplement_notes else "")
+                                        + supplement_notes
+                                    ).strip()
 
-            # --- Pagination buttons ---
+                                    summary = summarize_collector(str(lead["lead_id"]), combined_notes)
+                                    st.markdown("**Notes:**")
+                                    st.markdown(summary, unsafe_allow_html=True)
+                                except Exception as e:
+                                    st.error(f"Summarization failed: {e}")
+
+            # --- Pagination controls ---
+            st.markdown("---")
             col_prev, col_next = st.columns([1, 1])
             with col_prev:
                 if st.button("Previous", disabled=st.session_state.data_page == 0):
