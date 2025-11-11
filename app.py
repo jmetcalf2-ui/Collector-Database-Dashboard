@@ -310,12 +310,6 @@ with tabs[1]:
                     else:
                         location = ""
 
-                    # Only add the dash if there is a location
-                    if location:
-                        expander_label = f"{name} — {location}"
-                    else:
-                        expander_label = name
-
                     with st.expander(expander_label):
                         st.markdown(f"**{name}**")
                         st.caption(f"{role if role else '—'} | Tier {tier if tier else '—'}")
@@ -354,32 +348,22 @@ with tabs[1]:
 
             # --- Pagination controls ---
             st.markdown("---")
-            
+
             # Center the buttons and make them sit side-by-side
             col_space_left, col_prev, col_next, col_space_right = st.columns([2, 1, 1, 2])
-            
+
             with col_prev:
                 if st.button("Previous", use_container_width=True, disabled=st.session_state.data_page == 0):
                     st.session_state.data_page -= 1
                     st.rerun()
-            
+
             with col_next:
                 if st.button("Next", use_container_width=True, disabled=st.session_state.data_page >= total_pages - 1):
                     st.session_state.data_page += 1
                     st.rerun()
-            # --- Pagination controls ---
-                        st.markdown("---")
-                        col_prev, col_next = st.columns([1, 1])
-                        with col_prev:
-                            if st.button("Previous", disabled=st.session_state.data_page == 0):
-                                st.session_state.data_page -= 1
-                                st.rerun()
-                        with col_next:
-                            if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
-                                st.session_state.data_page += 1
-                                st.rerun()
-         else:
-                        st.info("No leads found.")
+
+        else:
+            st.info("No leads found.")
 
 # ======================================================================
 # === SAVED SETS TAB ===
