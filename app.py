@@ -163,7 +163,7 @@ with tabs[0]:
                     st.write(f"**Tier:** {lead.get('tier','—')}")
                     st.write(f"**Role:** {lead.get('primary_role','—')}")
                     
-# --- Fetch supplements and summarize combined notes ---
+                    # --- Fetch supplements and summarize combined notes ---
                     try:
                         supplements = (
                             supabase.table("leads_supplements")
@@ -171,22 +171,37 @@ with tabs[0]:
                             .eq("lead_id", lead["id"])
                             .execute()
                             .data
+                            or []
                         )
                     
-                        combined_notes = (lead.get("notes") or "") + "\n\n"
-                        combined_notes += "\n\n".join([s["notes"] or "" for s in supplements if s.get("notes")])
+                        # Merge notes
+                        base_notes = lead.get("notes") or ""
+                        supplement_notes = "\n\n".join(
+                            [s["notes"] for s in supplements if s and s.get("notes")]
+                        )
+                        combined_notes = (base_notes + ("\n\n" if base_notes and supplement_notes else "") + supplement_notes).strip()
                     
-                        summary = summarize_collector(lead["id"], combined_notes)
+                        # Default summary
+                        summary = "—"
+                    
+                        # Use OpenAI if available
+                        if combined_notes and os.getenv("OPENAI_API_KEY"):
+                            summary = summarize_collector(str(lead["id"]), combined_notes)
+                            # Normalize to bullet points
+                            lines = [ln.strip("-• ").strip() for ln in summary.splitlines() if ln.strip()]
+                            if lines and not summary.lstrip().startswith(("-", "•")):
+                                summary = "\n".join(f"- {ln}" for ln in lines)
+                        elif combined_notes:
+                            # Fallback to raw notes
+                            summary = combined_notes[:600]
                     
                         st.markdown("**Notes:**")
-                        st.markdown(summary)
+                        st.markdown(summary, unsafe_allow_html=True)
+                    
                     except Exception as e:
-                        st.error(f"Failed to summarize notes: {e}")
-
-        else:
-            st.info("No leads found.")
-    else:
-        st.empty()
+                        st.markdown("**Notes:**")
+                        st.write("Couldn’t generate summary. Showing raw notes.")
+                        st.write((lead.get("notes") or "")[:600])
 
     # --- Divider ---
     st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
