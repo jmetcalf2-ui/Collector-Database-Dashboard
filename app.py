@@ -249,6 +249,8 @@ with tabs[0]:
 # === CONTACTS TAB ===
 # ======================================================================
 with tabs[1]:
+    st.markdown("## Contacts")
+
     # --- Create a new contact form ---
     with st.expander("Create a Contact", expanded=False):
         with st.form("create_contact_form"):
@@ -291,10 +293,8 @@ with tabs[1]:
                     except Exception as e:
                         st.error(f"Error creating contact: {e}")
 
-    # --- Add spacing before contacts list ---
-    st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
-
-    st.markdown("## Contacts")
+    # --- Add small spacing before contact list ---
+    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
     if not supabase:
         st.warning("Database unavailable.")
