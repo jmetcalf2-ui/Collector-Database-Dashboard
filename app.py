@@ -133,7 +133,17 @@ def summarize_collector(lead_id: str, combined_notes: str) -> str:
 with tabs[0]:
     st.markdown("## Search")
 
-    col1, col2, col3, col4, col5 = st.columns([2, 1.2, 1.2, 1.2, 1.2])
+    st.markdown("""
+    <style>
+    input[data-testid="stTextInput"]::placeholder {
+        color: #888 !important;
+        opacity: 1 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # --- Unified Search Layout ---
+    col1, col2, col3, col4, col5 = st.columns([2.2, 1.2, 1.2, 1.2, 1.2])
     with col1:
         keyword = st.text_input("Keyword", placeholder="Name, email, interests, etc.")
     with col2:
@@ -145,36 +155,67 @@ with tabs[0]:
     with col5:
         role = st.text_input("Primary Role")
 
+    # --- Semantic Search Field (inline, cohesive look) ---
+    semantic_query = st.text_input(
+        "Semantic Search",
+        placeholder="e.g. Minimalism collectors or those following Bruce Nauman",
+    )
+
+    # --- Button ---
     if st.button("Search Leads") and supabase:
-        query = supabase.table("leads").select("*")
-        if keyword:
-            query = query.ilike("full_name", f"%{keyword}%")
-        if city:
-            query = query.ilike("city", f"%{city}%")
-        if country:
-            query = query.ilike("country", f"%{country}%")
-        if tier:
-            query = query.eq("tier", tier)
-        if role:
-            query = query.ilike("primary_role", f"%{role}%")
-        data = query.limit(100).execute().data or []
-        if data:
-            st.write(f"Found {len(data)} results")
-            for lead in data:
+        with st.spinner("Searching..."):
+            results = []
+
+            if semantic_query.strip():
+                # --- Run semantic search if semantic query entered ---
+                try:
+                    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                    emb = client.embeddings.create(
+                        model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-large"),
+                        input=semantic_query,
+                    ).data[0].embedding
+
+                    res = supabase.rpc(
+                        "rpc_semantic_search_leads_supplements",
+                        {
+                            "query_embedding": list(map(float, emb)),
+                            "match_count": 25,
+                            "min_score": 0.15,
+                        },
+                    ).execute()
+
+                    results = res.data or []
+                    st.caption("Showing semantic matches")
+                except Exception as e:
+                    st.error(f"Semantic search failed: {e}")
+            else:
+                # --- Fallback to regular search ---
+                query = supabase.table("leads").select("*")
+                if keyword:
+                    query = query.ilike("full_name", f"%{keyword}%")
+                if city:
+                    query = query.ilike("city", f"%{city}%")
+                if country:
+                    query = query.ilike("country", f"%{country}%")
+                if tier:
+                    query = query.eq("tier", tier)
+                if role:
+                    query = query.ilike("primary_role", f"%{role}%")
+                results = query.limit(100).execute().data or []
+
+        # --- Display results (shared logic) ---
+        if results:
+            st.success(f"Found {len(results)} results")
+            for lead in results:
                 with st.expander(f"{lead.get('full_name', 'Unnamed')}{' — ' + lead['city'] if lead.get('city') else ''}"):
                     st.write(f"**Email:** {lead.get('email','—')}")
                     st.write(f"**Tier:** {lead.get('tier','—')}")
                     st.write(f"**Role:** {lead.get('primary_role','—')}")
 
-                    # --- Fetch supplements and summarize combined notes ---
                     try:
-                        # ✅ Determine correct primary key (lead_id or id)
                         lead_pk = lead.get("lead_id") or lead.get("id")
                         if not lead_pk:
-                            st.error("Lead row missing both 'lead_id' and 'id'.")
                             continue
-
-                        # ✅ Fetch supplements for this lead
                         supplements = (
                             supabase.table("leads_supplements")
                             .select("notes")
@@ -184,7 +225,6 @@ with tabs[0]:
                             or []
                         )
 
-                        # ✅ Merge notes safely
                         base_notes = lead.get("notes") or ""
                         supplement_notes = "\n\n".join(
                             (s.get("notes") or "").strip() for s in supplements if isinstance(s, dict)
@@ -195,18 +235,15 @@ with tabs[0]:
                             + supplement_notes
                         ).strip()
 
-                        # 🔍 Debug info
-                        st.caption(f"Notes length: {len(combined_notes)} | Supplements: {len(supplements)}")
-
-                        # ✅ Summarize using OpenAI
                         summary = summarize_collector(str(lead_pk), combined_notes)
                         st.markdown("**Notes:**")
                         st.markdown(summary, unsafe_allow_html=True)
-
                     except Exception as e:
                         st.markdown("**Notes:**")
                         st.write(f"⚠️ Failed to summarize: {e}")
                         st.write((lead.get("notes") or "")[:600])
+        else:
+            st.info("No leads found.")
 
     # --- Divider ---
     st.markdown("<hr class='soft'/>", unsafe_allow_html=True)
