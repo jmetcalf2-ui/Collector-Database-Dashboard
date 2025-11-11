@@ -372,69 +372,59 @@ with tabs[3]:
     # --- RIGHT COLUMN: Active Chat ---
     with right:
         st.markdown("#### Current Chat")
-
+    
         chat_container = st.container()
-
-        # --- Clean chat message rendering (no icons) ---
+    
+        # --- Render chat messages (clean markdown style) ---
         for msg in st.session_state.active_chat:
-            role_class = "user-msg" if msg["role"] == "user" else "assistant-msg"
-            chat_container.markdown(
-                f"""
-                <div class="{role_class}">
-                    {msg["content"]}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-                # --- Custom CSS for chat bubbles (auto-width based on text length) ---
-        st.markdown("""
-        <style>
-        .user-msg {
-            background-color: #f5f5f5;
-            padding: 10px 14px;
-            border-radius: 14px;
-            margin: 6px 0;
-            display: inline-flex;
-            align-self: flex-end;
-            justify-content: flex-end;
-            text-align: right;
-            color: #111;
-            word-break: break-word;
-            max-width: 75%;
-        }
-        .assistant-msg {
-            background-color: #ffffff;
-            border: 1px solid #e8e8e8;
-            padding: 10px 14px;
-            border-radius: 14px;
-            margin: 6px 0;
-            display: inline-flex;
-            align-self: flex-start;
-            text-align: left;
-            color: #111;
-            word-break: break-word;
-            max-width: 75%;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        }
-        .user-msg, .assistant-msg {
-            animation: fadeIn 0.2s ease-in;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(4px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-
+            if msg["role"] == "user":
+                st.markdown(
+                    f"""
+                    <div style="
+                        background-color:#f5f5f5;
+                        color:#111;
+                        padding:10px 14px;
+                        border-radius:12px;
+                        margin:6px 0;
+                        text-align:right;
+                        max-width:75%;
+                        float:right;
+                        clear:both;
+                        box-shadow:0 1px 2px rgba(0,0,0,0.1);
+                        word-break:break-word;">
+                        {msg["content"]}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    f"""
+                    <div style="
+                        background-color:#ffffff;
+                        color:#111;
+                        padding:10px 14px;
+                        border-radius:12px;
+                        margin:6px 0;
+                        text-align:left;
+                        max-width:75%;
+                        float:left;
+                        clear:both;
+                        box-shadow:0 1px 3px rgba(0,0,0,0.08);
+                        word-break:break-word;">
+                        {msg["content"]}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+    
         # --- Chat input ---
+        st.markdown("<div style='clear:both'></div>", unsafe_allow_html=True)
         user_input = st.chat_input("Ask about collectors, regions, or interests...")
-
+    
         if user_input:
             st.session_state.active_chat.append({"role": "user", "content": user_input})
-            chat_container.markdown(f"<div class='user-msg'>{user_input}</div>", unsafe_allow_html=True)
-
+    
             with st.spinner("Thinking..."):
                 try:
                     messages = [{"role": "system", "content": system_prompt}]
@@ -446,12 +436,13 @@ with tabs[3]:
                         max_tokens=700,
                     )
                     response_text = completion.choices[0].message.content.strip()
-                    chat_container.markdown(f"<div class='assistant-msg'>{response_text}</div>", unsafe_allow_html=True)
-                    st.session_state.active_chat.append(
-                        {"role": "assistant", "content": response_text}
-                    )
+    
+                    # Append response and re-render
+                    st.session_state.active_chat.append({"role": "assistant", "content": response_text})
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Chat failed: {e}")
+
 
         # --- New Chat Button ---
         if st.session_state.active_chat:
