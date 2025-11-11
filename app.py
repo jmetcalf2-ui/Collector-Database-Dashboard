@@ -378,7 +378,7 @@ with tabs[1]:
                             if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
                                 st.session_state.data_page += 1
                                 st.rerun()
-                    else:
+         else:
                         st.info("No leads found.")
 
 # ======================================================================
