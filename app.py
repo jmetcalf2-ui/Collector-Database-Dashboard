@@ -81,7 +81,7 @@ except Exception as e:
 
 
 # --- Tabs ---
-tabs = st.tabs(["Search", "Data", "Saved Sets", "Chat"])
+tabs = st.tabs(["Search", "Contacts", "Saved Sets", "Chat"])
 
 # --- Cached AI summarization helper ---
 @st.cache_data(show_spinner=False)
@@ -249,7 +249,7 @@ with tabs[0]:
 # === DATA TAB ===
 # ======================================================================
 with tabs[1]:
-    st.markdown("## Data Overview")
+    st.markdown("## Contacts Overview")
 
     if not supabase:
         st.warning("Database unavailable.")
