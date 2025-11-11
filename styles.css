@@ -1,20 +1,37 @@
 /* Helvetica-forward, light minimal design */
-
 html, body, [class*="css"] {
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif !important;
   color: #111 !important;
+  background-color: #ffffff !important;
 }
 
-/* Page layout */
+/* --- LAYOUT CLEANUP: Remove sidebar and enforce full-width --- */
+section[data-testid="stSidebar"] {
+  display: none !important;
+}
+
 .block-container {
-  padding-top: 2rem;
-  padding-bottom: 3rem;
+  padding-top: 2rem !important;
+  padding-bottom: 3rem !important;
+  padding-left: 2rem !important;
+  padding-right: 2rem !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+}
+
+/* Ensure main app container stretches across width */
+main[data-testid="stAppViewContainer"] {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  margin: 0 auto !important;
+  background-color: #ffffff !important;
 }
 
 /* Typography */
 h1, h2, h3 {
   letter-spacing: 0.2px;
   font-weight: 500;
+  color: #111 !important;
 }
 
 /* Card containers */
@@ -44,7 +61,7 @@ hr.soft {
   margin: 1.5rem 0 1rem 0;
 }
 
-/* --- REAL FIX: remove blank Streamlit “ghost” containers --- */
+/* Remove empty Streamlit “ghost” containers */
 div[data-testid="stVerticalBlock"] > div:empty,
 div[data-testid="stHorizontalBlock"] > div:empty,
 div[data-testid="stBlock"] > div:empty,
@@ -66,4 +83,29 @@ div[data-testid="stTextInputRootElement"] > div:empty {
 /* Tighten spacing between cards */
 div.block-container > div:has(> div.card) {
   margin-top: 0 !important;
+}
+
+/* Improve button and input aesthetics globally */
+button[kind="primary"], button[kind="secondary"], button {
+  border-radius: 6px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.2px !important;
+}
+
+input, textarea, select {
+  border-radius: 6px !important;
+  border: 1px solid #e0e0e0 !important;
+  box-shadow: none !important;
+}
+
+/* Streamlit scrollbar cleanup */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #bcbcbc;
 }
