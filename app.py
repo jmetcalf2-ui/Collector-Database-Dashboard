@@ -196,7 +196,7 @@ with tabs[0]:
                         ).strip()
 
                         # 🔍 Debug info
-                        st.caption(f"🧩 Notes length: {len(combined_notes)} | Supplements: {len(supplements)}")
+                        st.caption(f"Notes length: {len(combined_notes)} | Supplements: {len(supplements)}")
 
                         # ✅ Summarize using OpenAI
                         summary = summarize_collector(str(lead_pk), combined_notes)
