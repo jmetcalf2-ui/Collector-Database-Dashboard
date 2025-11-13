@@ -18,10 +18,17 @@ section[data-testid="stSidebar"] {
 }
 
 /* -----------------------------------------------------------
-   REMOVE TAB BUBBLES — SUPABASE UNDERLINE STYLE
+   REMOVE TAB BUBBLES — KEEP ONLY OUR RED UNDERLINE
 ----------------------------------------------------------- */
+
+/* Remove Streamlit's default red underline */
+div[data-baseweb="tab-highlight"] {
+  display: none !important;
+}
+
+/* Style tab labels */
 div.stTabs [data-baseweb="tab-list"] {
-  gap: 2rem !important;
+  gap: 2.2rem !important;
   border-bottom: 1px solid #eee !important;
   padding-bottom: 6px !important;
 }
@@ -36,22 +43,15 @@ div.stTabs [data-baseweb="tab"] {
   color: #666 !important;
 }
 
+/* Selected tab = single red underline */
 div.stTabs [data-baseweb="tab"][aria-selected="true"] {
   color: #111 !important;
-  border-bottom: 2px solid #e53935 !important;
+  border-bottom: 3px solid #e53935 !important;
 }
 
-/* Remove tab hover ghosts */
+/* Remove hover ghost */
 div.stTabs button:hover {
   background: none !important;
-}
-
-/* -----------------------------------------------------------
-   FIX CHAT HEADER FONT SIZES
------------------------------------------------------------ */
-h3, .chat-header, .current-chat-header {
-  font-size: 1.1rem !important;
-  font-weight: 600 !important;
 }
 
 /* -----------------------------------------------------------
@@ -64,14 +64,16 @@ input, textarea, select, div[data-baseweb="select"] > div {
   box-shadow: none !important;
 }
 
-/* Fix Streamlit selectbox weird white bubble */
+/* Remove weird white bubble inside select */
 div[data-baseweb="select"] > div {
   background: #ffffff !important;
 }
 
 /* -----------------------------------------------------------
-   CONTACT CARDS — REMOVE WEIRD WHITE BUBBLES
+   CONTACT CARDS — REMOVE BUBBLES COMPLETELY
 ----------------------------------------------------------- */
+
+/* Your contact card wrapper */
 .contact-card {
   background: #fff !important;
   border: 1px solid #f1f1f1 !important;
@@ -81,14 +83,18 @@ div[data-baseweb="select"] > div {
   margin-bottom: 1.2rem !important;
 }
 
-/* Remove ghost vertical gaps Streamlit adds */
+/* NEW FIX: All empty Streamlit structural divs must disappear */
+div[data-testid="column"] > div:empty,
 div[data-testid="stVerticalBlock"] > div:empty,
 div[data-testid="stHorizontalBlock"] > div:empty,
 div[data-testid="stBlock"] > div:empty,
-div[data-testid="stVerticalBlockBorderWrapper"] > div:empty {
+div[data-testid="stVerticalBlockBorderWrapper"] > div:empty,
+div[data-testid="stElementContainer"] > div:empty {
   display: none !important;
-  margin: 0 !important;
+  height: 0 !important;
   padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
 }
 
 /* -----------------------------------------------------------
@@ -111,7 +117,7 @@ div[data-testid="stButton"] > button:hover {
 }
 
 /* -----------------------------------------------------------
-   CHAT BUBBLE FIX
+   CHAT BUBBLES
 ----------------------------------------------------------- */
 .message-user {
   background: #e8eef8 !important;
@@ -130,12 +136,4 @@ div[data-testid="stButton"] > button:hover {
   max-width: 75%;
   float: left;
   clear: both;
-}
-
-/* Chat headings — larger but not huge */
-.chat-header, .current-chat-header {
-    font-size: 1.5rem !important;   /* clean, balanced size */
-    font-weight: 600 !important;
-    margin-bottom: 0.5rem !important;
-    color: #1f1f1f !important;
 }
