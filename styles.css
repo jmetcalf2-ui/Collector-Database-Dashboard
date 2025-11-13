@@ -134,7 +134,7 @@ div[data-testid="stButton"] > button:hover {
 
 /* Chat headings — larger but not huge */
 .chat-header, .current-chat-header {
-    font-size: 1.35rem !important;   /* clean, balanced size */
+    font-size: 10rem !important;   /* clean, balanced size */
     font-weight: 600 !important;
     margin-bottom: 0.5rem !important;
     color: #1f1f1f !important;
