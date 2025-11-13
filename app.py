@@ -319,15 +319,29 @@ with tabs[1]:
             city_val = lead.get("city") or ""
             country_val = lead.get("country") or ""
             
-            name_to_tier = "&nbsp;" * 75
-            tier_to_email = "&nbsp;" * 37
-            
-            label = (
-                f"{name.ljust(40)}"
-                f"Tier: {tier.ljust(10)}"
-                f"{email_val}"
-            )
-
+              # -----------------------------
+            # DYNAMIC SPACING FOR LABEL
+            # -----------------------------
+            # Rough "column" positions (tweak these numbers until it visually lines up)
+            TIER_COL = 40     # where "Tier:" should roughly start (in characters)
+            EMAIL_COL = 80    # where email should roughly start
+        
+            def nbsp(n: int) -> str:
+                return "&nbsp;" * max(1, n)
+        
+            # visible lengths of the text pieces (no HTML here)
+            name_len = len(name)
+            tier_text = f"Tier: {tier}"
+            tier_len = len(tier_text)
+        
+            # how many &nbsp; we need to push "Tier" to TIER_COL
+            name_to_tier = nbsp(TIER_COL - name_len)
+        
+            # how many &nbsp; we need to push email to EMAIL_COL
+            tier_to_email = nbsp(EMAIL_COL - name_len - len(tier_text))
+        
+            label = f"{name}{name_to_tier}{tier_text}{tier_to_email}{email_val}"
+        
             with st.expander(label, expanded=False):
                 st.markdown("", unsafe_allow_html=True)
 
@@ -335,14 +349,15 @@ with tabs[1]:
                 # DETAILS SECTION
                 # -----------------------------
                 st.markdown(f"### {name}")
-
+        
                 if city_val or country_val:
                     st.caption(f"{city_val}, {country_val}".strip(", "))
-
+        
                 st.caption(f"{role_val} | Tier {tier}")
                 st.write(email_val)
-
+        
                 st.markdown("---")
+                # ... rest of your actions etc ...
 
                 # -----------------------------
                 # ACTION BUTTONS
