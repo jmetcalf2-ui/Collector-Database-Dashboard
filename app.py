@@ -248,7 +248,7 @@ with tabs[1]:
 
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
-    # -------------------------------------------------------
+# -------------------------------------------------------
 # CONTACT TABLE — SPREADSHEET STYLE
 # -------------------------------------------------------
 if not supabase:
@@ -338,125 +338,102 @@ else:
 
         with st.expander(label, expanded=False):
             st.markdown("", unsafe_allow_html=True)
-     if city_val or country_val:
-                    st.caption(f"{city_val}, {country_val}".strip(", "))
 
-                st.caption(f"{role_val} | Tier {tier}")
-                st.write(email_val)
+            # -----------------------------
+            # DETAILS SECTION  ← MUST BE INSIDE EXPANDER
+            # -----------------------------
+            if city_val or country_val:
+                st.caption(f"{city_val}, {country_val}".strip(", "))
 
-                st.markdown("---")
+            st.caption(f"{role_val} | Tier {tier}")
+            st.write(email_val)
 
-                # -----------------------------
-                # ACTION BUTTONS
-                # -----------------------------
-                action_col1, action_col2, action_col3 = st.columns([2, 2, 1])
+            st.markdown("---")
 
-                # Summarize
-                with action_col1:
-                    if summary_key not in st.session_state:
-                        if st.button(f"Summarize {name}", key=f"summ_{lead_key}"):
-                            with st.spinner("Summarizing…"):
-                                try:
-                                    supplements = (
-                                        supabase.table("leads_supplements")
-                                        .select("notes")
-                                        .eq("lead_id", lead_key)
-                                        .execute()
-                                        .data or []
-                                    )
+            # -----------------------------
+            # ACTION BUTTONS  ← ALSO INSIDE EXPANDER
+            # -----------------------------
+            action_col1, action_col2, action_col3 = st.columns([2, 2, 1])
 
-                                    base_notes = lead.get("notes") or ""
-                                    supplement_notes = "\n\n".join(
-                                        (s.get("notes") or "").strip()
-                                        for s in supplements
-                                    )
+            # Summarize
+            with action_col1:
+                if summary_key not in st.session_state:
+                    if st.button(f"Summarize {name}", key=f"summ_{lead_key}"):
+                        with st.spinner("Summarizing…"):
+                            try:
+                                supplements = (
+                                    supabase.table("leads_supplements")
+                                    .select("notes")
+                                    .eq("lead_id", lead_key)
+                                    .execute()
+                                    .data or []
+                                )
 
-                                    combined_notes = (
-                                        base_notes
-                                        + ("\n\n" if base_notes and supplement_notes else "")
-                                        + supplement_notes
-                                    ).strip()
+                                base_notes = lead.get("notes") or ""
+                                supplement_notes = "\n\n".join(
+                                    (s.get("notes") or "").strip()
+                                    for s in supplements
+                                )
 
-                                    summary = summarize_collector(lead_key, combined_notes)
-                                    st.session_state[summary_key] = summary
-                                    st.rerun()
+                                combined_notes = (
+                                    base_notes
+                                    + ("\n\n" if base_notes and supplement_notes else "")
+                                    + supplement_notes
+                                ).strip()
 
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-                    else:
-                        st.markdown("### Notes")
-                        st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+                                summary = summarize_collector(lead_key, combined_notes)
+                                st.session_state[summary_key] = summary
+                                st.rerun()
 
-                # Add to Saved Set
-                with action_col2:
-                    st.button("Add to Saved Set", key=f"save_{lead_key}")
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+                else:
+                    st.markdown("### Notes")
+                    st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
 
-                # Delete
-                with action_col3:
-                    if st.button("Delete", key=f"del_{lead_key}"):
-                        st.session_state[f"confirm_delete_{lead_key}"] = True
+            # Add to Saved Set
+            with action_col2:
+                st.button("Add to Saved Set", key=f"save_{lead_key}")
 
-                # Confirm deletion
-                if st.session_state.get(f"confirm_delete_{lead_key}", False):
-                    st.warning(f"Delete {name}?")
-                    yes = st.button("Yes", key=f"yes_{lead_key}")
-                    no = st.button("No", key=f"no_{lead_key}")
+            # Delete
+            with action_col3:
+                if st.button("Delete", key=f"del_{lead_key}"):
+                    st.session_state[f"confirm_delete_{lead_key}"] = True
 
-                    if yes:
-                        try:
-                            supabase.table("leads").delete().eq("lead_id", lead_key).execute()
-                            st.success("Deleted.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Delete failed: {e}")
+            # Confirm deletion
+            if st.session_state.get(f"confirm_delete_{lead_key}", False):
+                st.warning(f"Delete {name}?")
+                yes = st.button("Yes", key=f"yes_{lead_key}")
+                no = st.button("No", key=f"no_{lead_key}")
 
-                    if no:
-                        st.session_state[f"confirm_delete_{lead_key}"] = False
+                if yes:
+                    try:
+                        supabase.table("leads").delete().eq("lead_id", lead_key).execute()
+                        st.success("Deleted.")
                         st.rerun()
+                    except Exception as e:
+                        st.error(f"Delete failed: {e}")
 
-        # -------------------------------------------------------
-        # PAGINATION
-        # -------------------------------------------------------
-        st.markdown("<hr>", unsafe_allow_html=True)
+                if no:
+                    st.session_state[f"confirm_delete_{lead_key}"] = False
+                    st.rerun()
 
-        left, prev, nxt, right = st.columns([2, 1, 1, 2])
+    # -------------------------------------------------------
+    # PAGINATION
+    # -------------------------------------------------------
+    st.markdown("<hr>", unsafe_allow_html=True)
 
-        with prev:
-            if st.button("Previous", disabled=st.session_state.data_page == 0):
-                st.session_state.data_page -= 1
-                st.rerun()
+    left, prev, nxt, right = st.columns([2, 1, 1, 2])
 
-        with nxt:
-            if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
-                st.session_state.data_page += 1
-                st.rerun()
+    with prev:
+        if st.button("Previous", disabled=st.session_state.data_page == 0):
+            st.session_state.data_page -= 1
+            st.rerun()
 
-
-# =========================================================
-# === SAVED SETS TAB ======================================
-# =========================================================
-with tabs[2]:
-    st.markdown("<h2>Saved Sets</h2>", unsafe_allow_html=True)
-
-    if not supabase:
-        st.warning("Database unavailable.")
-    else:
-        sets = (
-            supabase.table("saved_sets")
-            .select("*")
-            .order("created_at", desc=True)
-            .execute()
-            .data
-            or []
-        )
-
-        if not sets:
-            st.info("No saved sets yet.")
-        else:
-            for s in sets:
-                with st.expander(s["name"]):
-                    st.write(f"**Description:** {s.get('description', '—')}")
-                    st.write(f"**Created:** {s.get('created_at', '—')}")
+    with nxt:
+        if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
+            st.session_state.data_page += 1
+            st.rerun()
 
 # ======================================================================
 # === CHAT TAB ===
