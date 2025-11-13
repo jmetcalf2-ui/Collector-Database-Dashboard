@@ -320,9 +320,13 @@ with tabs[1]:
             country_val = lead.get("country") or ""
 
             # CLICKABLE ROW
-            space = "&nbsp;&nbsp;&nbsp;"  # 3 HTML spaces
-
-            label = f"{name}{space}|{space}Tier: {tier}{space}|{space}{email_val}"
+            name_to_tier = "&nbsp;" * 16
+            tier_to_email = "&nbsp;" * 14
+            
+            label = (
+                f"{name}{name_to_tier}|{name_to_tier}"
+                f"Tier: {tier}{tier_to_email}|{tier_to_email}{email_val}"
+            )
             
             with st.expander(label, expanded=False):
                 st.markdown("", unsafe_allow_html=True)
