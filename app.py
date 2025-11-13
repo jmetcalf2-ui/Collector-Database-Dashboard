@@ -323,10 +323,13 @@ with tabs[1]:
             name_to_tier = "&nbsp;" * 75
             tier_to_email = "&nbsp;" * 37
             
-            label = (
-                f"{name}{name_to_tier} {name_to_tier}"
-                f"Tier: {tier}{tier_to_email} {tier_to_email}{email_val}"
-            )
+            label = f"""
+            <div class="expander-row">
+                <div>{name}</div>
+                <div>Tier: {tier}</div>
+                <div>{email_val}</div>
+            </div>
+            """
 
             with st.expander(label, expanded=False):
                 st.markdown("", unsafe_allow_html=True)
