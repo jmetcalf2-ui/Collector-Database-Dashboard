@@ -321,7 +321,7 @@ with tabs[1]:
 
             # CLICKABLE ROW
             with st.expander(
-                f"{name} | Tier {tier} | {email_val}",
+                f"{name}                               Tier {tier} | {email_val}",
                 expanded=False
             ):
 
