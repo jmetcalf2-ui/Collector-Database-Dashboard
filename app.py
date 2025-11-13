@@ -320,7 +320,7 @@ with tabs[1]:
             country_val = lead.get("country") or ""
 
             # CLICKABLE ROW
-            name_to_tier = "&nbsp;" * 40
+            name_to_tier = "&nbsp;" * 60
             tier_to_email = "&nbsp;" * 14
             
             label = (
