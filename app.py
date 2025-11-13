@@ -448,20 +448,18 @@ with tabs[3]:
             "galleries, and market trends when relevant. Keep responses factual and concise."
         )
 
-    # --- OpenAI client ---
+    # --- Initialize OpenAI client ---
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # --- Layout (two-column like Contacts tab) ---
-    chat_container_full = st.container()
+    # --- Two-column layout (same proportions as before) ---
+    left, right = st.columns([2.4, 6.6], gap="large")
 
-    with chat_container_full:
-        left, right = st.columns([2.4, 6.6], gap="large")
-
-    # ================================================================
-    # LEFT COLUMN — CHAT HISTORY
-    # ================================================================
+    # ------------------------------------------------------
+    # LEFT COLUMN: CHAT HISTORY
+    # ------------------------------------------------------
     with left:
-        st.markdown("## Chats")   # <-- MATCHES CONTACTS SIZE
+        # 👇 EXACT same heading style as "Contacts"
+        st.markdown("## Chats")
 
         if not st.session_state.chat_sessions:
             st.info("No previous chats.")
@@ -472,58 +470,30 @@ with tabs[3]:
                     st.session_state.active_chat = session["history"].copy()
                     st.rerun()
 
-    # ================================================================
-    # RIGHT COLUMN — CURRENT CHAT
-    # ================================================================
+    # ------------------------------------------------------
+    # RIGHT COLUMN: CURRENT CHAT
+    # ------------------------------------------------------
     with right:
-        st.markdown("## Current Chat")   # <-- FIXED HEADER SIZE
+        # 👇 Also an H2, so it matches Contacts 1:1
+        st.markdown("## Current Chat")
 
-        chat_box = st.container()
-
-        # Render chat history messages
+        # Render chat messages using the CSS bubbles you defined
         for msg in st.session_state.active_chat:
             if msg["role"] == "user":
                 st.markdown(
-                    f"""
-                    <div style="
-                        background:#e8eef8;
-                        padding:12px 15px;
-                        border-radius:14px;
-                        margin:10px 0;
-                        max-width:75%;
-                        float:right;
-                        clear:both;
-                    ">
-                        {msg['content']}
-                    </div>
-                    """,
+                    f"<div class='message-user'>{msg['content']}</div>",
                     unsafe_allow_html=True
                 )
             else:
                 st.markdown(
-                    f"""
-                    <div style="
-                        background:#ffffff;
-                        padding:12px 15px;
-                        border-radius:14px;
-                        margin:10px 0;
-                        max-width:75%;
-                        float:left;
-                        clear:both;
-                        border:1px solid #ececec;
-                    ">
-                        {msg['content']}
-                    </div>
-                    """,
+                    f"<div class='message-assistant'>{msg['content']}</div>",
                     unsafe_allow_html=True
                 )
 
-        # Clear float
+        # Clear floats so the input bar doesn’t overlap bubbles
         st.markdown("<div style='clear:both'></div>", unsafe_allow_html=True)
 
-        # ================================================================
-        # CHAT INPUT
-        # ================================================================
+        # ---------------- Chat input ----------------
         user_input = st.chat_input("Ask a question…")
 
         if user_input:
@@ -540,41 +510,36 @@ with tabs[3]:
                         temperature=0.5,
                         max_tokens=700,
                     )
+                    response_text = completion.choices[0].message.content.strip()
 
-                    reply = completion.choices[0].message.content.strip()
-                    st.session_state.active_chat.append({"role": "assistant", "content": reply})
-
+                    st.session_state.active_chat.append(
+                        {"role": "assistant", "content": response_text}
+                    )
                     st.rerun()
-
                 except Exception as e:
                     st.error(f"Chat failed: {e}")
 
-        # ================================================================
-        # NEW CHAT BUTTON
-        # ================================================================
+        # ---------------- New Chat button ----------------
         if st.session_state.active_chat:
             st.divider()
             if st.button("New Chat", use_container_width=True):
-
                 try:
                     preview_text = " ".join(
                         [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
                     )[:600]
 
                     summary_prompt = (
-                        "Summarize this conversation in 3–5 plain words. No emojis.\n\n"
+                        "Summarize this conversation in 3–5 plain words, no emojis or punctuation. "
+                        "Example: 'European collectors trends'.\n\n"
                         f"{preview_text}"
                     )
-
                     summary_resp = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[{"role": "user", "content": summary_prompt}],
                         max_tokens=20,
                         temperature=0.5,
                     )
-
                     summary_text = summary_resp.choices[0].message.content.strip()
-
                 except Exception:
                     summary_text = "Untitled chat"
 
@@ -583,6 +548,5 @@ with tabs[3]:
                     "summary": summary_text,
                     "history": st.session_state.active_chat.copy(),
                 })
-
                 st.session_state.active_chat = []
                 st.rerun()
