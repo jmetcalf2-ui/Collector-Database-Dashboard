@@ -319,27 +319,7 @@ with tabs[1]:
             city_val = lead.get("city") or ""
             country_val = lead.get("country") or ""
 
-            # -------------------------------------------------------
-            # NEW: ALIGNED SPREADSHEET ROW (ONLY ADDITION)
-            # -------------------------------------------------------
-            st.markdown(f"""
-                <div style="
-                    display: grid;
-                    grid-template-columns: 2fr 1fr 2fr;
-                    padding: 10px 12px;
-                    font-size: 14px;
-                    border-bottom: 1px solid #f5f5f5;
-                    color: #333;
-                ">
-                    <div>{name}</div>
-                    <div>{tier}</div>
-                    <div>{email_val}</div>
-                </div>
-            """, unsafe_allow_html=True)
-
-            # -------------------------------------------------------
-            # CLICKABLE EXPANDER (UNCHANGED)
-            # -------------------------------------------------------
+            # CLICKABLE ROW
             with st.expander(
                 f"{name} | Tier {tier} | {email_val}",
                 expanded=False
