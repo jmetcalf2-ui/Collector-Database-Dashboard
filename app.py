@@ -320,7 +320,7 @@ with tabs[1]:
             country_val = lead.get("country") or ""
 
             # CLICKABLE ROW
-            space = "              "  # customize your spacing here
+            space = "                                                                                                 "  # customize your spacing here
 
             with st.expander(
                 f"{name}{space}|{space}Tier: {tier}{space}|{space}{email_val}",
