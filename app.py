@@ -248,7 +248,7 @@ with tabs[1]:
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
     # -------------------------------------------------------
-    # PAGINATION
+    # PAGINATION SETUP
     # -------------------------------------------------------
     if "data_page" not in st.session_state:
         st.session_state.data_page = 0
@@ -256,6 +256,7 @@ with tabs[1]:
     per_page = 20
     offset = st.session_state.data_page * per_page
 
+    # Count total
     try:
         total_response = (
             supabase.table("leads")
@@ -269,16 +270,19 @@ with tabs[1]:
 
     total_pages = max(1, (total_count + per_page - 1) // per_page)
 
-    st.caption(f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total contacts")
+    st.caption(
+        f"Page {st.session_state.data_page + 1} of {total_pages} — "
+        f"{total_count} total contacts"
+    )
 
     # -------------------------------------------------------
-    # FETCH LEADS (ORDERED A→Z)
+    # FETCH LEADS (A→Z)
     # -------------------------------------------------------
     try:
         leads = (
             supabase.table("leads")
             .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
-            .order("full_name", desc=False)     # FIXED HERE
+            .order("full_name", desc=False)        # ← FIXED
             .range(offset, offset + per_page - 1)
             .execute()
             .data or []
@@ -308,7 +312,7 @@ with tabs[1]:
     """, unsafe_allow_html=True)
 
     # -------------------------------------------------------
-    # TABLE ROWS
+    # TABLE ROWS — SAFE expanders
     # -------------------------------------------------------
     for lead in leads:
         lead_id = str(lead["lead_id"])
@@ -316,37 +320,34 @@ with tabs[1]:
         tier = lead.get("tier") or "—"
         email_val = lead.get("email") or "—"
 
-        # Row expander (clickable)
-        with st.expander(
-            f"""
-            <div style='
-                display: grid;
-                grid-template-columns: 2fr 1fr 2fr;
-                padding: 10px 10px;
-                font-size: 14px;
-            '>
-                <div>{name}</div>
-                <div>{tier}</div>
-                <div>{email_val}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        ):
-            # Expanded content
+        # ❗ SAFE ONE-LINE EXPANDER LABEL
+        exp_label = (
+            f"<div style='display:grid;grid-template-columns:2fr 1fr 2fr;"
+            f"padding:10px 10px;font-size:14px;'>"
+            f"<div>{name}</div>"
+            f"<div>{tier}</div>"
+            f"<div>{email_val}</div>"
+            f"</div>"
+        )
+
+        with st.expander(exp_label, unsafe_allow_html=True):
+
             st.markdown(f"### {name}")
 
-            role_val = lead.get("primary_role") or "—"
+            role = lead.get("primary_role") or "—"
             city_val = lead.get("city") or ""
             country_val = lead.get("country") or ""
 
             if city_val or country_val:
                 st.caption(f"{city_val}, {country_val}".strip(", "))
 
-            st.write(f"**Role:** {role_val}")
+            st.write(f"**Role:** {role}")
             st.write(f"**Email:** {email_val}")
             st.write(f"**Tier:** {tier}")
 
-            # ---------------- Buttons ----------------
+            # ---------------------------------------------------
+            # BUTTONS — LEFT ALIGNED
+            # ---------------------------------------------------
             btn1, btn2, btn3 = st.columns([1, 1, 1])
 
             # Summarize
@@ -359,17 +360,18 @@ with tabs[1]:
                         .execute()
                         .data or []
                     )
+
                     base_notes = lead.get("notes") or ""
                     supplement_notes = "\n\n".join(
                         (s.get("notes") or "") for s in supplements
                     )
-                    combined_notes = (base_notes + "\n\n" + supplement_notes).strip()
+                    combined = (base_notes + "\n\n" + supplement_notes).strip()
 
-                    summary = summarize_collector(lead_id, combined_notes)
+                    summary = summarize_collector(lead_id, combined)
                     st.markdown("### Summary")
                     st.markdown(summary)
 
-            # Add to Saved Set
+            # Add to saved set
             with btn2:
                 st.button("Add to Saved Set", key=f"save_{lead_id}")
 
@@ -397,7 +399,7 @@ with tabs[1]:
                         st.rerun()
 
     # -------------------------------------------------------
-    # PAGINATION BUTTONS — ALIGNED SIDE BY SIDE
+    # PAGINATION BUTTONS — ALIGNED SIDE-BY-SIDE
     # -------------------------------------------------------
     st.markdown("<hr>", unsafe_allow_html=True)
 
