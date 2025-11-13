@@ -319,6 +319,17 @@ with tabs[1]:
             city_val = lead.get("city") or ""
             country_val = lead.get("country") or ""
 
+            st.markdown("""
+            <style>
+            .expander-row {
+                display: grid;
+                grid-template-columns: 2fr 1fr 2fr;
+                width: 100%;
+                font-family: inherit;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
             # CLICKABLE ROW
             name_to_tier = "&nbsp;" * 75
             tier_to_email = "&nbsp;" * 37
