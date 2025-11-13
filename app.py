@@ -201,94 +201,7 @@ with tabs[0]:
 # ======================================================================
 with tabs[1]:
 
-    # -------------------------
-    # Page Title
-    # -------------------------
-    st.markdown("""
-    <h2 style="margin-bottom: 8px;">Contacts</h2>
-    """, unsafe_allow_html=True)
-
-    # -------------------------
-    # Elegant CSS Styling  
-    # -------------------------
-    st.markdown("""
-    <style>
-
-    /* --- Table structure --- */
-    .contact-header, .contact-row {
-        display: grid;
-        grid-template-columns: 2fr 0.7fr 2fr;
-        padding: 10px 14px;
-        font-size: 15px;
-        align-items: center;
-    }
-
-    /* Header */
-    .contact-header {
-        font-weight: 600;
-        border-bottom: 1px solid #e1e1e1;
-        color: #333;
-        margin-top: 10px;
-    }
-
-    /* Rows */
-    .contact-row {
-        border-bottom: 1px solid #f3f3f3;
-        transition: background-color 0.15s ease;
-    }
-
-    .contact-row:hover {
-        background-color: #fafafa;
-    }
-
-    /* Name button */
-    .name-button {
-        background: none !important;
-        border: none !important;
-        text-align: left !important;
-        padding: 0 !important;
-        font-size: 15px !important;
-        font-weight: 500 !important;
-        color: #0a3a7e !important;
-        cursor: pointer;
-    }
-
-    .name-button:hover {
-        text-decoration: underline;
-    }
-
-    /* Tier badge */
-    .tier-badge {
-        font-weight: 500;
-        padding: 2px 10px;
-        border-radius: 6px;
-        font-size: 13px;
-        display: inline-block;
-    }
-
-    .tier-A { background: #e8f1ff; color: #144a92; }
-    .tier-B { background: #f4f4f4; color: #555; }
-    .tier-C { background: #f9ecec; color: #7d2d2d; }
-    .tier-dash { background: #eee; color: #444; }
-
-    /* Detail panel */
-    .detail-container {
-        border: 1px solid #e8e8e8;
-        border-radius: 8px;
-        padding: 18px;
-        margin: 10px 0 20px 0;
-        background: #fff;
-    }
-
-    /* Clean section dividers */
-    .divider {
-        height: 1px;
-        background: #ececec;
-        margin: 14px 0;
-    }
-
-    </style>
-    """, unsafe_allow_html=True)
+    st.markdown("## Contacts")
 
     # -------------------------------------------------------
     # CREATE CONTACT FORM
@@ -336,7 +249,7 @@ with tabs[1]:
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
     # -------------------------------------------------------
-    # CONTACT TABLE
+    # CONTACT TABLE — SPREADSHEET STYLE
     # -------------------------------------------------------
     if not supabase:
         st.warning("Database unavailable.")
@@ -348,26 +261,44 @@ with tabs[1]:
         offset = st.session_state.data_page * per_page
 
         # Count rows
-        total_count = supabase.table("leads").select("*", count="exact").limit(1).execute().count or 0
+        try:
+            total_response = supabase.table("leads").select("*", count="exact").limit(1).execute()
+            total_count = total_response.count or 0
+        except Exception:
+            total_count = 0
+
         total_pages = max(1, (total_count + per_page - 1) // per_page)
 
-        st.caption(f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total contacts")
-
-        # Fetch leads
-        leads = (
-            supabase.table("leads")
-            .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
-            .order("full_name")
-            .range(offset, offset + per_page - 1)
-            .execute()
-            .data or []
+        st.caption(
+            f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total contacts"
         )
 
+        # Fetch leads
+        try:
+            leads = (
+                supabase.table("leads")
+                .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
+                .order("full_name", desc=False)
+                .range(offset, offset + per_page - 1)
+                .execute()
+                .data or []
+            )
+        except Exception:
+            leads = []
+
         # -------------------------------------------------------
-        # HEADER
+        # TABLE HEADER
         # -------------------------------------------------------
         st.markdown("""
-        <div class="contact-header">
+        <div style="
+            display: grid;
+            grid-template-columns: 2fr 1fr 2fr;
+            padding: 8px 12px;
+            font-weight: 600;
+            font-size: 14px;
+            border-bottom: 1px solid #eee;
+            color: #444;
+        ">
             <div>Name</div>
             <div>Tier</div>
             <div>Email</div>
@@ -375,113 +306,108 @@ with tabs[1]:
         """, unsafe_allow_html=True)
 
         # -------------------------------------------------------
-        # ROWS
+        # TABLE ROWS
         # -------------------------------------------------------
         for lead in leads:
             lead_key = str(lead["lead_id"])
+            summary_key = f"summary_{lead_key}"
+
             name = lead.get("full_name") or "Unnamed"
             tier = lead.get("tier") or "—"
             email_val = lead.get("email") or "—"
-            role = lead.get("primary_role") or "—"
-            city = lead.get("city") or ""
-            country = lead.get("country") or ""
+            role_val = lead.get("primary_role") or "—"
+            city_val = lead.get("city") or ""
+            country_val = lead.get("country") or ""
 
-            # Click state
-            open_key = f"open_{lead_key}"
-            if open_key not in st.session_state:
-                st.session_state[open_key] = False
+            # CLICKABLE ROW
+            with st.expander(
+                f"{name} | Tier {tier} | {email_val}",
+                expanded=False
+            ):
 
-            # ------------------------------
-            # Row Grid
-            # ------------------------------
-            col1, col2, col3 = st.columns([2, 1, 2])
+                # -----------------------------
+                # DETAILS SECTION
+                # -----------------------------
+                st.markdown(f"### {name}")
 
-            # Name = clickable
-            with col1:
-                if st.button(name, key=f"name_{lead_key}", use_container_width=True):
-                    st.session_state[open_key] = not st.session_state[open_key]
+                if city_val or country_val:
+                    st.caption(f"{city_val}, {country_val}".strip(", "))
 
-            # Tier badge
-            with col2:
-                badge_class = f"tier-{tier}" if tier in ["A", "B", "C"] else "tier-dash"
-                st.markdown(f"<span class='tier-badge {badge_class}'>{tier}</span>", unsafe_allow_html=True)
-
-            # Email
-            with col3:
+                st.caption(f"{role_val} | Tier {tier}")
                 st.write(email_val)
 
-            # ------------------------------
-            # Dropdown panel
-            # ------------------------------
-            if st.session_state[open_key]:
-                with st.container():
-                    st.markdown("<div class='detail-container'>", unsafe_allow_html=True)
+                st.markdown("---")
 
-                    st.markdown(f"<h4 style='margin-top:0'>{name}</h4>", unsafe_allow_html=True)
+                # -----------------------------
+                # ACTION BUTTONS
+                # -----------------------------
+                action_col1, action_col2, action_col3 = st.columns([2, 2, 1])
 
-                    if city or country:
-                        st.caption(f"{city}, {country}".strip(", "))
+                # Summarize
+                with action_col1:
+                    if summary_key not in st.session_state:
+                        if st.button(f"Summarize {name}", key=f"summ_{lead_key}"):
+                            with st.spinner("Summarizing…"):
+                                try:
+                                    supplements = (
+                                        supabase.table("leads_supplements")
+                                        .select("notes")
+                                        .eq("lead_id", lead_key)
+                                        .execute()
+                                        .data or []
+                                    )
 
-                    st.caption(f"{role} | Tier {tier}")
-                    st.write(email_val)
+                                    base_notes = lead.get("notes") or ""
+                                    supplement_notes = "\n\n".join(
+                                        (s.get("notes") or "").strip()
+                                        for s in supplements
+                                    )
 
-                    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+                                    combined_notes = (
+                                        base_notes
+                                        + ("\n\n" if base_notes and supplement_notes else "")
+                                        + supplement_notes
+                                    ).strip()
 
-                    # ---------------- Buttons -----------------
-                    c1, c2, c3 = st.columns([2, 2, 1])
+                                    summary = summarize_collector(lead_key, combined_notes)
+                                    st.session_state[summary_key] = summary
+                                    st.rerun()
 
-                    # Summarize
-                    with c1:
-                        if st.button("Summarize", key=f"summ_{lead_key}"):
-                            supplements = (
-                                supabase.table("leads_supplements")
-                                .select("notes")
-                                .eq("lead_id", lead_key)
-                                .execute()
-                                .data or []
-                            )
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
+                    else:
+                        st.markdown("### Notes")
+                        st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
 
-                            base_notes = lead.get("notes") or ""
-                            supplement_notes = "\n\n".join((s.get("notes") or "").strip() for s in supplements)
-                            combined_notes = (
-                                base_notes
-                                + ("\n\n" if base_notes and supplement_notes else "")
-                                + supplement_notes
-                            ).strip()
+                # Add to Saved Set
+                with action_col2:
+                    st.button("Add to Saved Set", key=f"save_{lead_key}")
 
-                            summary = summarize_collector(lead_key, combined_notes)
-                            st.markdown("### Notes")
-                            st.markdown(summary, unsafe_allow_html=True)
+                # Delete
+                with action_col3:
+                    if st.button("Delete", key=f"del_{lead_key}"):
+                        st.session_state[f"confirm_delete_{lead_key}"] = True
 
-                    # Save
-                    with c2:
-                        st.button("Add to Saved Set", key=f"save_{lead_key}")
+                # Confirm deletion
+                if st.session_state.get(f"confirm_delete_{lead_key}", False):
+                    st.warning(f"Delete {name}?")
+                    yes = st.button("Yes", key=f"yes_{lead_key}")
+                    no = st.button("No", key=f"no_{lead_key}")
 
-                    # Delete
-                    with c3:
-                        if st.button("Delete", key=f"del_{lead_key}"):
-                            st.session_state[f"confirm_delete_{lead_key}"] = True
-
-                    # Confirm delete
-                    if st.session_state.get(f"confirm_delete_{lead_key}", False):
-                        st.warning(f"Delete {name}?")
-
-                        yes = st.button("Yes", key=f"yes_{lead_key}")
-                        no = st.button("No", key=f"no_{lead_key}")
-
-                        if yes:
+                    if yes:
+                        try:
                             supabase.table("leads").delete().eq("lead_id", lead_key).execute()
                             st.success("Deleted.")
                             st.rerun()
+                        except Exception as e:
+                            st.error(f"Delete failed: {e}")
 
-                        if no:
-                            st.session_state[f"confirm_delete_{lead_key}"] = False
-                            st.rerun()
-
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    if no:
+                        st.session_state[f"confirm_delete_{lead_key}"] = False
+                        st.rerun()
 
         # -------------------------------------------------------
-        # Pagination
+        # PAGINATION
         # -------------------------------------------------------
         st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -496,6 +422,7 @@ with tabs[1]:
             if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
                 st.session_state.data_page += 1
                 st.rerun()
+
 
 # =========================================================
 # === SAVED SETS TAB ======================================
