@@ -18,10 +18,8 @@ section[data-testid="stSidebar"] {
 }
 
 /* -----------------------------------------------------------
-   REMOVE TAB BUBBLES — KEEP ONLY OUR RED UNDERLINE
+   TABS — CLEAN UNDERLINE STYLE
 ----------------------------------------------------------- */
-
-/* Style tab labels */
 div.stTabs [data-baseweb="tab-list"] {
   gap: 2.2rem !important;
   border-bottom: 1px solid #eee !important;
@@ -38,13 +36,12 @@ div.stTabs [data-baseweb="tab"] {
   color: #666 !important;
 }
 
-/* Remove hover ghost */
 div.stTabs button:hover {
   background: none !important;
 }
 
 /* -----------------------------------------------------------
-   INPUT + SELECT FIXES
+   INPUTS + SELECT FIXES
 ----------------------------------------------------------- */
 input, textarea, select, div[data-baseweb="select"] > div {
   background: #ffffff !important;
@@ -53,26 +50,50 @@ input, textarea, select, div[data-baseweb="select"] > div {
   box-shadow: none !important;
 }
 
-/* Remove weird white bubble inside select */
-div[data-baseweb="select"] > div {
-  background: #ffffff !important;
-}
-
 /* -----------------------------------------------------------
-   CONTACT CARDS — REMOVE BUBBLES COMPLETELY
+   SPREADSHEET CONTACT TABLE
 ----------------------------------------------------------- */
 
-/* Your contact card wrapper */
-.contact-card {
-  background: #fff !important;
-  border: 1px solid #f1f1f1 !important;
-  border-radius: 14px !important;
-  padding: 1rem 1.2rem !important;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.04) !important;
-  margin-bottom: 1.2rem !important;
+.contact-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 14px;
+  border-bottom: 1px solid #eee;
+  color: #444;
 }
 
-/* NEW FIX: All empty Streamlit structural divs must disappear */
+.contact-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f6f6f6;
+  font-size: 14px;
+}
+
+.contact-row:hover {
+  background: #fafafa;
+}
+
+/* Align details under headers */
+.contact-details-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr;
+  gap: 8px;
+  padding: 6px 4px;
+  margin-bottom: 6px;
+}
+
+/* Left-aligned buttons */
+.contact-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* Remove empty ghost divs Streamlit inserts */
 div[data-testid="column"] > div:empty,
 div[data-testid="stVerticalBlock"] > div:empty,
 div[data-testid="stHorizontalBlock"] > div:empty,
@@ -80,24 +101,15 @@ div[data-testid="stBlock"] > div:empty,
 div[data-testid="stVerticalBlockBorderWrapper"] > div:empty,
 div[data-testid="stElementContainer"] > div:empty {
   display: none !important;
-  height: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border: none !important;
 }
 
 /* -----------------------------------------------------------
    BUTTONS
 ----------------------------------------------------------- */
-button {
-  border-radius: 6px !important;
-  font-weight: 500 !important;
-}
-
 div[data-testid="stButton"] > button {
   border: 1px solid #ddd !important;
   background: #fafafa !important;
-  padding: 8px 12px !important;
+  padding: 7px 12px !important;
 }
 
 div[data-testid="stButton"] > button:hover {
