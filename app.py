@@ -237,6 +237,7 @@ with tabs[1]:
                             })
                             .execute()
                         )
+
                         if getattr(response, "status_code", 400) < 300:
                             st.success(f"{full_name} added.")
                             st.rerun()
@@ -248,7 +249,7 @@ with tabs[1]:
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
     # -------------------------------------------------------
-    # PAGINATION
+    # PAGINATION SETUP
     # -------------------------------------------------------
     if "data_page" not in st.session_state:
         st.session_state.data_page = 0
@@ -256,7 +257,7 @@ with tabs[1]:
     per_page = 20
     offset = st.session_state.data_page * per_page
 
-    # Count total
+    # Count leads
     try:
         total_response = (
             supabase.table("leads")
@@ -271,8 +272,7 @@ with tabs[1]:
     total_pages = max(1, (total_count + per_page - 1) // per_page)
 
     st.caption(
-        f"Page {st.session_state.data_page + 1} of {total_pages} — "
-        f"{total_count} total contacts"
+        f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total contacts"
     )
 
     # -------------------------------------------------------
@@ -285,26 +285,25 @@ with tabs[1]:
             .order("full_name", desc=False)
             .range(offset, offset + per_page - 1)
             .execute()
-            .data or []
+            .data
+            or []
         )
     except Exception as e:
         st.error(f"Failed to fetch leads: {e}")
         leads = []
 
     # -------------------------------------------------------
-    # TABLE HEADER
+    # TABLE HEADER — perfectly aligned
     # -------------------------------------------------------
     st.markdown("""
     <div style="
         display: grid;
         grid-template-columns: 2fr 1fr 2fr;
-        padding: 8px 10px;
+        padding: 8px 6px;
         border-bottom: 1px solid #eee;
         font-weight: 600;
         font-size: 14px;
-        color: #444;
-        margin-top: 6px;
-    ">
+        color: #444;">
         <div>Name</div>
         <div>Tier</div>
         <div>Email</div>
@@ -312,36 +311,32 @@ with tabs[1]:
     """, unsafe_allow_html=True)
 
     # -------------------------------------------------------
-    # SAFE EXPANDERS (NO HTML LABELS)
+    # ROWS — perfectly aligned under header
     # -------------------------------------------------------
     for lead in leads:
         lead_id = str(lead["lead_id"])
         name = lead.get("full_name", "Unnamed")
-        tier = lead.get("tier") or "—"
+        tier_val = lead.get("tier") or "—"
         email_val = lead.get("email") or "—"
 
-        # Expander label must be plain text
-        exp_label = f"{name} | Tier {tier} | {email_val}"
+        # Expander label (single clean line, aligned to header)
+        exp_label = f"""
+        <div style="
+            display: grid;
+            grid-template-columns: 2fr 1fr 2fr;
+            padding: 10px 6px;
+            font-size: 14px;">
+            <div>{name}</div>
+            <div>{tier_val}</div>
+            <div>{email_val}</div>
+        </div>
+        """
 
-        with st.expander(exp_label):
-
-            # Now show the spreadsheet row INSIDE the expander
-            st.markdown(f"""
-            <div style="
-                display:grid;
-                grid-template-columns:2fr 1fr 2fr;
-                padding:10px 10px;
-                font-size:14px;
-                margin-bottom:10px;
-            ">
-                <div>{name}</div>
-                <div>{tier}</div>
-                <div>{email_val}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
+        # ------------------------ EXPANDER ------------------------
+        with st.expander(exp_label, unsafe_allow_html=True):
             st.markdown(f"### {name}")
 
+            # CITY / ROLE / EMAIL CLEAN BLOCK
             role = lead.get("primary_role") or "—"
             city_val = lead.get("city") or ""
             country_val = lead.get("country") or ""
@@ -351,14 +346,15 @@ with tabs[1]:
 
             st.write(f"**Role:** {role}")
             st.write(f"**Email:** {email_val}")
-            st.write(f"**Tier:** {tier}")
+            st.write(f"**Tier:** {tier_val}")
 
-            # ---------------------------------------------------
-            # BUTTONS (left aligned)
-            # ---------------------------------------------------
-            btn1, btn2, btn3 = st.columns([1, 1, 1])
+            st.markdown("---")
 
-            with btn1:
+            # ---------------- BUTTON ROW (aligned left) ----------------
+            btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 1])
+
+            # Summarize
+            with btn_col1:
                 if st.button("Summarize", key=f"sum_{lead_id}"):
                     supplements = (
                         supabase.table("leads_supplements")
@@ -371,42 +367,40 @@ with tabs[1]:
                     supplement_notes = "\n\n".join(
                         (s.get("notes") or "") for s in supplements
                     )
-                    combined = (base_notes + "\n\n" + supplement_notes).strip()
+                    combined_notes = (base_notes + "\n\n" + supplement_notes).strip()
 
-                    summary = summarize_collector(lead_id, combined)
-                    st.markdown("### Summary")
+                    summary = summarize_collector(lead_id, combined_notes)
+                    st.markdown("#### Summary")
                     st.markdown(summary)
 
-            with btn2:
+            # Add to Saved Set
+            with btn_col2:
                 st.button("Add to Saved Set", key=f"save_{lead_id}")
 
-            with btn3:
+            # Delete
+            with btn_col3:
                 if st.button("Delete", key=f"del_{lead_id}"):
                     st.session_state[f"confirm_delete_{lead_id}"] = True
 
             # Confirm deletion
             if st.session_state.get(f"confirm_delete_{lead_id}", False):
                 st.warning(f"Delete {name}?")
+                yes = st.button("Yes, delete", key=f"yes_{lead_id}")
+                no = st.button("Cancel", key=f"no_{lead_id}")
 
-                yes, no = st.columns([1, 1])
+                if yes:
+                    supabase.table("leads").delete().eq("lead_id", lead_id).execute()
+                    st.success(f"{name} deleted.")
+                    st.session_state[f"confirm_delete_{lead_id}"] = False
+                    st.rerun()
 
-                with yes:
-                    if st.button("Yes, delete", key=f"yes_{lead_id}"):
-                        supabase.table("leads").delete().eq("lead_id", lead_id).execute()
-                        st.success(f"{name} deleted.")
-                        st.session_state[f"confirm_delete_{lead_id}"] = False
-                        st.rerun()
-
-                with no:
-                    if st.button("Cancel", key=f"no_{lead_id}"):
-                        st.session_state[f"confirm_delete_{lead_id}"] = False
-                        st.rerun()
+                if no:
+                    st.session_state[f"confirm_delete_{lead_id}"] = False
+                    st.rerun()
 
     # -------------------------------------------------------
-    # PAGINATION BUTTONS
+    # PAGINATION BUTTONS (side by side)
     # -------------------------------------------------------
-    st.markdown("<hr>", unsafe_allow_html=True)
-
     prev_col, next_col = st.columns([1, 1])
 
     with prev_col:
