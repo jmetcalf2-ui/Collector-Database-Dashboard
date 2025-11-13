@@ -6,17 +6,40 @@ from openai import OpenAI
 from datetime import datetime
 from pathlib import Path
 
-# ---------------------------------------------------------
-# PAGE SETUP
-# ---------------------------------------------------------
+# --- Page setup ---
 st.set_page_config(page_title="Dashboard", layout="wide")
-inject_css()   # loads style.css
+inject_css()
 
-# Sidebar hidden (already removed via CSS)
+# --- Full-width but centered layout ---
+st.markdown("""
+<style>
+/* Left-align all buttons (chat history) */
+div[data-testid="stButton"] > button {
+    text-align: left !important;
+    justify-content: flex-start !important;
+    border: 1px solid #ddd !important;
+    border-radius: 6px !important;
+    background-color: #f9f9f9 !important;
+    padding: 8px 12px !important;
+    margin-bottom: 6px !important;
+    font-weight: 500 !important;
+    color: #222 !important;
+    white-space: pre-wrap !important;
+}
+
+/* Subtle hover effect */
+div[data-testid="stButton"] > button:hover {
+    background-color: #f1f1f1 !important;
+    border-color: #ccc !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# --- Sidebar ---
 with st.sidebar:
     st.write(" ")
 
-# Session state init
+# --- Initialize session state ---
 if "selected_leads" not in st.session_state:
     st.session_state.selected_leads = []
 if "chat_sessions" not in st.session_state:
@@ -24,31 +47,52 @@ if "chat_sessions" not in st.session_state:
 if "active_chat" not in st.session_state:
     st.session_state.active_chat = []
 
-# Header
+# --- Global style ---
+st.markdown("""
+<style>
+div[data-testid="column"]:first-child {
+    background-color: #fafafa;
+    border-right: 1px solid #eee;
+    padding-right: 12px;
+}
+div[data-testid="stButton"] > button.chat-btn {
+    text-align: left;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background-color: #f9f9f9;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #222;
+    white-space: pre-wrap;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# --- Main content ---
 st.markdown("<h1>Dashboard</h1>", unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# CONNECT SUPABASE
-# ---------------------------------------------------------
+# --- Connect Supabase (silent connect, no banner) ---
 try:
     supabase = get_supabase()
 except Exception as e:
     st.error(f"⚠️ Supabase connection failed: {e}")
     supabase = None
 
-# ---------------------------------------------------------
-# TABS
-# ---------------------------------------------------------
+
+# --- Tabs ---
 tabs = st.tabs(["Search", "Contacts", "Saved Sets", "Chat"])
 
-# ---------------------------------------------------------
-# OPENAI SUMMARIZER CACHE
-# ---------------------------------------------------------
+# --- Cached AI summarization helper ---
 @st.cache_data(show_spinner=False)
 def summarize_collector(lead_id: str, combined_notes: str) -> str:
+    """
+    Summarizes collector intelligence notes into bullet points using OpenAI.
+    Prints debug info if key or data missing.
+    """
     key = os.getenv("OPENAI_API_KEY")
     if not key:
-        return "⚠️ Missing OPENAI_API_KEY."
+        return "⚠️ Missing OPENAI_API_KEY — add it to your environment."
 
     if not combined_notes.strip():
         return "⚠️ No notes found for this lead."
@@ -58,11 +102,18 @@ def summarize_collector(lead_id: str, combined_notes: str) -> str:
         prompt = f"""
         You are an expert art-market researcher creating collector intelligence summaries.
         Write 4–6 short bullet points summarizing this collector's data factually.
-        Avoid adjectives. Stick to institutional roles, artist preferences, purchases, philanthropy.
+        Focus on specifics like:
+        - Artists collected or recently purchased
+        - Museum/institutional boards or affiliations
+        - Geography (city or region)
+        - Collecting tendencies or philanthropy
+        - Notable sales, acquisitions, or foundations
+        Avoid adjectives like 'important' or 'renowned'.
+        Example: 'Collects Glenn Ligon and Kara Walker; MoMA trustee; founded Art for Justice Fund.'
+
         NOTES:
         {combined_notes}
         """
-
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -72,22 +123,29 @@ def summarize_collector(lead_id: str, combined_notes: str) -> str:
             temperature=0.3,
             max_tokens=500,
         )
-
         return response.choices[0].message.content.strip()
-
     except Exception as e:
         return f"⚠️ OpenAI error: {e}"
 
-# =========================================================
-# === SEARCH TAB ==========================================
-# =========================================================
+# ======================================================================
+# === SEARCH TAB ===
+# ======================================================================
 with tabs[0]:
-    st.markdown("<h2>Search</h2>", unsafe_allow_html=True)
+    st.markdown("## Search")
 
-    # Search filters in 5 columns
+    st.markdown("""
+    <style>
+    input[data-testid="stTextInput"]::placeholder {
+        color: #888 !important;
+        opacity: 1 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # --- Unified Search Layout ---
     col1, col2, col3, col4, col5 = st.columns([2.2, 1.2, 1.2, 1.2, 1.2])
     with col1:
-        keyword = st.text_input("Keyword", placeholder="Name, email, interests…")
+        keyword = st.text_input("Keyword", placeholder="Name, email, interests, etc.")
     with col2:
         city = st.text_input("City")
     with col3:
@@ -97,18 +155,19 @@ with tabs[0]:
     with col5:
         role = st.text_input("Primary Role")
 
+    # --- Semantic Search Field (inline, cohesive look) ---
     semantic_query = st.text_input(
         "Semantic Search",
-        placeholder="e.g. Minimalism collectors"
+        placeholder="e.g. Minimalism collectors or those following Bruce Nauman",
     )
 
-    # Perform search
+    # --- Button ---
     if st.button("Search Leads") and supabase:
-        with st.spinner("Searching…"):
+        with st.spinner("Searching..."):
             results = []
 
-            # Semantic search branch
             if semantic_query.strip():
+                # --- Run semantic search if semantic query entered ---
                 try:
                     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
                     emb = client.embeddings.create(
@@ -127,14 +186,11 @@ with tabs[0]:
 
                     results = res.data or []
                     st.caption("Showing semantic matches")
-
                 except Exception as e:
                     st.error(f"Semantic search failed: {e}")
-
-            # Filtered lookup branch
             else:
+                # --- Fallback to regular search ---
                 query = supabase.table("leads").select("*")
-
                 if keyword:
                     query = query.ilike("full_name", f"%{keyword}%")
                 if city:
@@ -145,26 +201,21 @@ with tabs[0]:
                     query = query.eq("tier", tier)
                 if role:
                     query = query.ilike("primary_role", f"%{role}%")
-
                 results = query.limit(100).execute().data or []
 
-        # Display results
+        # --- Display results (shared logic) ---
         if results:
             st.success(f"Found {len(results)} results")
-
             for lead in results:
-                name = lead.get("full_name", "Unnamed")
-                label = name
-                if lead.get("city"):
-                    label += f" — {lead['city']}"
-
-                with st.expander(label):
-                    st.write(f"**Email:** {lead.get('email', '—')}")
-                    st.write(f"**Tier:** {lead.get('tier', '—')}")
-                    st.write(f"**Role:** {lead.get('primary_role', '—')}")
+                with st.expander(f"{lead.get('full_name', 'Unnamed')}{' — ' + lead['city'] if lead.get('city') else ''}"):
+                    st.write(f"**Email:** {lead.get('email','—')}")
+                    st.write(f"**Tier:** {lead.get('tier','—')}")
+                    st.write(f"**Role:** {lead.get('primary_role','—')}")
 
                     try:
                         lead_pk = lead.get("lead_id") or lead.get("id")
+                        if not lead_pk:
+                            continue
                         supplements = (
                             supabase.table("leads_supplements")
                             .select("notes")
@@ -176,9 +227,8 @@ with tabs[0]:
 
                         base_notes = lead.get("notes") or ""
                         supplement_notes = "\n\n".join(
-                            (s.get("notes") or "").strip() for s in supplements
+                            (s.get("notes") or "").strip() for s in supplements if isinstance(s, dict)
                         )
-
                         combined_notes = (
                             base_notes
                             + ("\n\n" if base_notes and supplement_notes else "")
@@ -186,30 +236,27 @@ with tabs[0]:
                         ).strip()
 
                         summary = summarize_collector(str(lead_pk), combined_notes)
-
                         st.markdown("**Notes:**")
                         st.markdown(summary, unsafe_allow_html=True)
-
                     except Exception as e:
-                        st.write(f"⚠️ Could not summarize: {e}")
-
+                        st.markdown("**Notes:**")
+                        st.write(f"⚠️ Failed to summarize: {e}")
+                        st.write((lead.get("notes") or "")[:600])
         else:
             st.info("No leads found.")
 
 # ======================================================================
-# === CONTACTS TAB ======================================================
+# === CONTACTS TAB ===
 # ======================================================================
 with tabs[1]:
-
     st.markdown("## Contacts")
 
-    # -------------------------------------------------------
-    # CREATE CONTACT FORM
-    # -------------------------------------------------------
+    # --- Create a new contact form ---
     with st.expander("Create a Contact", expanded=False):
         with st.form("create_contact_form"):
-            st.markdown("Enter contact details to add a new record:")
+            st.markdown("Enter contact details to add a new record to the leads table:")
 
+            # Core lead fields — adjust to your Supabase schema
             full_name = st.text_input("Full Name")
             email = st.text_input("Email")
             primary_role = st.text_input("Primary Role")
@@ -218,8 +265,8 @@ with tabs[1]:
             tier = st.selectbox("Tier", ["A", "B", "C", "—"], index=3)
             notes = st.text_area("Notes", height=100)
 
+            # Submit
             submitted = st.form_submit_button("Create Contact")
-
             if submitted:
                 if not full_name or not email:
                     st.warning("Please provide at least a name and email.")
@@ -230,223 +277,181 @@ with tabs[1]:
                             .insert({
                                 "full_name": full_name.strip(),
                                 "email": email.strip(),
-                                "primary_role": primary_role.strip() or None,
-                                "city": city.strip() or None,
-                                "country": country.strip() or None,
+                                "primary_role": primary_role.strip() if primary_role else None,
+                                "city": city.strip() if city else None,
+                                "country": country.strip() if country else None,
                                 "tier": None if tier == "—" else tier,
-                                "notes": notes.strip() or None,
+                                "notes": notes.strip() if notes else None,
                             })
                             .execute()
                         )
                         if getattr(response, "status_code", 400) < 300:
-                            st.success(f"{full_name} added.")
+                            st.success(f"{full_name} has been added to your contacts.")
                             st.rerun()
                         else:
                             st.error(f"Insert failed: {response}")
                     except Exception as e:
                         st.error(f"Error creating contact: {e}")
 
-    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+    # --- Add small spacing before contact list ---
+    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
-    # -------------------------------------------------------
-    # CONTACT TABLE — SPREADSHEET STYLE
-    # -------------------------------------------------------
     if not supabase:
         st.warning("Database unavailable.")
     else:
+        # --- Pagination setup ---
         per_page = 20
         if "data_page" not in st.session_state:
             st.session_state.data_page = 0
 
         offset = st.session_state.data_page * per_page
 
-        # Count rows
+        # --- Count total leads ---
         try:
             total_response = supabase.table("leads").select("*", count="exact").limit(1).execute()
-            total_count = total_response.count or 0
-        except Exception:
+            total_count = getattr(total_response, "count", None) or 0
+        except Exception as e:
+            st.error(f"Could not fetch total lead count: {e}")
             total_count = 0
 
         total_pages = max(1, (total_count + per_page - 1) // per_page)
+        st.caption(f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total leads")
 
-        st.caption(
-            f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total contacts"
-        )
-
-        # Fetch leads
+        # --- Fetch paginated leads ---
         try:
             leads = (
                 supabase.table("leads")
                 .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
-                .order("full_name", desc=False)
+                .order("created_at", desc=True)
                 .range(offset, offset + per_page - 1)
                 .execute()
-                .data or []
+                .data
+                or []
             )
-        except Exception:
+        except Exception as e:
+            st.error(f"Failed to fetch leads: {e}")
             leads = []
 
-        # -------------------------------------------------------
-        # TABLE HEADER
-        # -------------------------------------------------------
-        st.markdown("""
-        <div style="
-            display: grid;
-            grid-template-columns: 2fr 1fr 2fr;
-            padding: 8px 12px;
-            font-weight: 600;
-            font-size: 14px;
-            border-bottom: 1px solid #eee;
-            color: #444;
-        ">
-            <div>Name</div>
-            <div>Tier</div>
-            <div>Email</div>
-        </div>
-        """, unsafe_allow_html=True)
+        # --- Display leads in grid ---
+        if leads:
+            cols = st.columns(2)
+            for i, lead in enumerate(leads):
+                col = cols[i % 2]
+                with col:
+                    name = lead.get("full_name", "Unnamed")
+                    tier_val = lead.get("tier", "—")
+                    role = lead.get("primary_role", "—")
+                    email_val = lead.get("email", "—")
+                    city = (lead.get("city") or "").strip()
+                    country = (lead.get("country") or "").strip()
 
-        # -------------------------------------------------------
-        # TABLE ROWS
-        # -------------------------------------------------------
-        for lead in leads:
-            lead_key = str(lead["lead_id"])
-            summary_key = f"summary_{lead_key}"
+                    expander_label = name
+                    lead_key = str(lead["lead_id"])
+                    summary_key = f"summary_{lead_key}"
 
-            name = lead.get("full_name") or "Unnamed"
-            tier = lead.get("tier") or "—"
-            email_val = lead.get("email") or "—"
-            role_val = lead.get("primary_role") or "—"
-            city_val = lead.get("city") or ""
-            country_val = lead.get("country") or ""
+                    with st.expander(expander_label):
+                        st.markdown(f"**{name}**")
 
-            # CLICKABLE ROW
-            with st.expander(
-                f"{name} | Tier {tier} | {email_val}",
-                expanded=False
-            ):
+                        if city or country:
+                            location = f"{city}, {country}".strip(", ")
+                            st.caption(location)
 
-                # -----------------------------
-                # DETAILS SECTION
-                # -----------------------------
-                st.markdown(f"### {name}")
+                        st.caption(f"{role if role else '—'} | Tier {tier_val if tier_val else '—'}")
+                        st.write(email_val)
 
-                if city_val or country_val:
-                    st.caption(f"{city_val}, {country_val}".strip(", "))
+                        # --- Row with Summarize and Delete buttons ---
+                        sum_col, del_col = st.columns([3, 1])
 
-                st.caption(f"{role_val} | Tier {tier}")
-                st.write(email_val)
+                        with sum_col:
+                            if summary_key not in st.session_state:
+                                if st.button(f"Summarize {name}", key=f"sum_{lead_key}"):
+                                    with st.spinner("Summarizing notes..."):
+                                        try:
+                                            supplements = (
+                                                supabase.table("leads_supplements")
+                                                .select("notes")
+                                                .eq("lead_id", lead_key)
+                                                .execute()
+                                                .data
+                                                or []
+                                            )
 
-                st.markdown("---")
+                                            base_notes = lead.get("notes") or ""
+                                            supplement_notes = "\n\n".join(
+                                                (s.get("notes") or "").strip()
+                                                for s in supplements
+                                                if isinstance(s, dict)
+                                            )
+                                            combined_notes = (
+                                                base_notes
+                                                + ("\n\n" if base_notes and supplement_notes else "")
+                                                + supplement_notes
+                                            ).strip()
 
-                # -----------------------------
-                # ACTION BUTTONS
-                # -----------------------------
-                action_col1, action_col2, action_col3 = st.columns([2, 2, 1])
+                                            summary = summarize_collector(lead_key, combined_notes)
+                                            st.session_state[summary_key] = summary
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Summarization failed: {e}")
+                            else:
+                                st.markdown("**Notes:**")
+                                st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
 
-                # Summarize
-                with action_col1:
-                    if summary_key not in st.session_state:
-                        if st.button(f"Summarize {name}", key=f"summ_{lead_key}"):
-                            with st.spinner("Summarizing…"):
-                                try:
-                                    supplements = (
-                                        supabase.table("leads_supplements")
-                                        .select("notes")
-                                        .eq("lead_id", lead_key)
-                                        .execute()
-                                        .data or []
-                                    )
+                        # --- Delete Contact Button ---
+                        with del_col:
+                            if st.button("Delete", key=f"del_{lead_key}"):
+                                st.session_state[f"confirm_delete_{lead_key}"] = True
 
-                                    base_notes = lead.get("notes") or ""
-                                    supplement_notes = "\n\n".join(
-                                        (s.get("notes") or "").strip()
-                                        for s in supplements
-                                    )
+                            if st.session_state.get(f"confirm_delete_{lead_key}", False):
+                                st.warning(f"Are you sure you want to delete {name}?")
+                                confirm = st.button("Yes, delete", key=f"confirm_del_{lead_key}")
+                                cancel = st.button("Cancel", key=f"cancel_del_{lead_key}")
 
-                                    combined_notes = (
-                                        base_notes
-                                        + ("\n\n" if base_notes and supplement_notes else "")
-                                        + supplement_notes
-                                    ).strip()
+                                if confirm:
+                                    try:
+                                        supabase.table("leads").delete().eq("lead_id", lead_key).execute()
+                                        st.success(f"{name} has been deleted.")
+                                        st.session_state[f"confirm_delete_{lead_key}"] = False
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error deleting contact: {e}")
 
-                                    summary = summarize_collector(lead_key, combined_notes)
-                                    st.session_state[summary_key] = summary
-                                    st.rerun()
+                                if cancel:
+                                    st.session_state[f"confirm_delete_{lead_key}"] = False
+                                    st.experimental_rerun()
 
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-                    else:
-                        st.markdown("### Notes")
-                        st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+            # --- Pagination controls ---
+            st.markdown("---")
+            col_space_left, col_prev, col_next, col_space_right = st.columns([2, 1, 1, 2])
 
-                # Add to Saved Set
-                with action_col2:
-                    st.button("Add to Saved Set", key=f"save_{lead_key}")
+            with col_prev:
+                if st.button("Previous", use_container_width=True, disabled=st.session_state.data_page == 0):
+                    st.session_state.data_page -= 1
+                    st.rerun()
 
-                # Delete
-                with action_col3:
-                    if st.button("Delete", key=f"del_{lead_key}"):
-                        st.session_state[f"confirm_delete_{lead_key}"] = True
-
-                # Confirm deletion
-                if st.session_state.get(f"confirm_delete_{lead_key}", False):
-                    st.warning(f"Delete {name}?")
-                    yes = st.button("Yes", key=f"yes_{lead_key}")
-                    no = st.button("No", key=f"no_{lead_key}")
-
-                    if yes:
-                        try:
-                            supabase.table("leads").delete().eq("lead_id", lead_key).execute()
-                            st.success("Deleted.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Delete failed: {e}")
-
-                    if no:
-                        st.session_state[f"confirm_delete_{lead_key}"] = False
-                        st.rerun()
-
-        # -------------------------------------------------------
-        # PAGINATION
-        # -------------------------------------------------------
-        st.markdown("<hr>", unsafe_allow_html=True)
-
-        left, prev, nxt, right = st.columns([2, 1, 1, 2])
-
-        with prev:
-            if st.button("Previous", disabled=st.session_state.data_page == 0):
-                st.session_state.data_page -= 1
-                st.rerun()
-
-        with nxt:
-            if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
-                st.session_state.data_page += 1
-                st.rerun()
+            with col_next:
+                if st.button("Next", use_container_width=True, disabled=st.session_state.data_page >= total_pages - 1):
+                    st.session_state.data_page += 1
+                    st.rerun()
+        else:
+            st.info("No leads found.")
 
 
-# =========================================================
-# === SAVED SETS TAB ======================================
-# =========================================================
+
+# ======================================================================
+# === SAVED SETS TAB ===
+# ======================================================================
 with tabs[2]:
-    st.markdown("<h2>Saved Sets</h2>", unsafe_allow_html=True)
-
+    st.markdown("## Saved Sets")
     if not supabase:
         st.warning("Database unavailable.")
     else:
-        sets = (
-            supabase.table("saved_sets")
-            .select("*")
-            .order("created_at", desc=True)
-            .execute()
-            .data
-            or []
-        )
-
+        sets = supabase.table("saved_sets").select("*").order("created_at", desc=True).execute().data or []
         if not sets:
             st.info("No saved sets yet.")
         else:
             for s in sets:
-                with st.expander(s["name"]):
+                with st.expander(f"{s['name']}"):
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
 
@@ -462,66 +467,102 @@ with tabs[3]:
     else:
         system_prompt = (
             "You are CollectorGPT — a helpful art-market assistant. "
-            "You answer questions conversationally, referencing collectors, artists, "
-            "galleries, and market trends when relevant. Keep responses factual and concise."
+            "You answer questions conversationally, referencing collectors, artists, galleries, and market trends when relevant. "
+            "Keep responses factual, concise, and well-reasoned."
         )
 
     # --- Initialize OpenAI client ---
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # --- Two-column layout (same proportions as before) ---
-    left, right = st.columns([2.4, 6.6], gap="large")
+    # --- Layout (match width with Search tab) ---
+    chat_container_full = st.container()
+    with chat_container_full:
+        st.markdown(
+            """
+            <style>
+            [data-testid="stHorizontalBlock"] {
+                width: 100% !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        left, right = st.columns([2.4, 6.6], gap="large")
 
-    # ------------------------------------------------------
-    # LEFT COLUMN: CHAT HISTORY
-    # ------------------------------------------------------
+    # --- LEFT COLUMN: Chat History ---
     with left:
-        # 👇 EXACT same heading style as "Contacts"
-        st.markdown("## Chats")
-
+        st.markdown("### Chats")
         if not st.session_state.chat_sessions:
-            st.info("No previous chats.")
+            st.info("No previous chats yet.")
         else:
             for i, session in enumerate(reversed(st.session_state.chat_sessions)):
                 summary = session.get("summary", "Untitled chat")
-                if st.button(summary, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
+                # Show only the chat title (summary) — no timestamp
+                label = f"{summary}"
+                if st.button(label, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
                     st.session_state.active_chat = session["history"].copy()
                     st.rerun()
 
-    # ------------------------------------------------------
-    # RIGHT COLUMN: CURRENT CHAT
-    # ------------------------------------------------------
+    # --- RIGHT COLUMN: Active Chat ---
     with right:
-        # 👇 Also an H2, so it matches Contacts 1:1
-        st.markdown("## Current Chat")
-
-        # Render chat messages using the CSS bubbles you defined
+        st.markdown("#### Current Chat")
+    
+        chat_container = st.container()
+    
+        # --- Render chat messages (clean markdown style) ---
         for msg in st.session_state.active_chat:
             if msg["role"] == "user":
                 st.markdown(
-                    f"<div class='message-user'>{msg['content']}</div>",
+                    f"""
+                    <div style="
+                        background-color:#f5f5f5;
+                        color:#111;
+                        padding:10px 14px;
+                        border-radius:12px;
+                        margin:6px 0;
+                        text-align:right;
+                        max-width:75%;
+                        float:right;
+                        clear:both;
+                        box-shadow:0 1px 2px rgba(0,0,0,0.1);
+                        word-break:break-word;">
+                        {msg["content"]}
+                    </div>
+                    """,
                     unsafe_allow_html=True
                 )
             else:
                 st.markdown(
-                    f"<div class='message-assistant'>{msg['content']}</div>",
+                    f"""
+                    <div style="
+                        background-color:#ffffff;
+                        color:#111;
+                        padding:10px 14px;
+                        border-radius:12px;
+                        margin:6px 0;
+                        text-align:left;
+                        max-width:75%;
+                        float:left;
+                        clear:both;
+                        box-shadow:0 1px 3px rgba(0,0,0,0.08);
+                        word-break:break-word;">
+                        {msg["content"]}
+                    </div>
+                    """,
                     unsafe_allow_html=True
                 )
-
-        # Clear floats so the input bar doesn’t overlap bubbles
+    
+        # --- Chat input ---
         st.markdown("<div style='clear:both'></div>", unsafe_allow_html=True)
-
-        # ---------------- Chat input ----------------
-        user_input = st.chat_input("Ask a question…")
-
+        user_input = st.chat_input("Ask about collectors, regions, or interests...")
+    
         if user_input:
             st.session_state.active_chat.append({"role": "user", "content": user_input})
-
+    
             with st.spinner("Thinking..."):
                 try:
                     messages = [{"role": "system", "content": system_prompt}]
                     messages.extend(st.session_state.active_chat)
-
                     completion = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=messages,
@@ -529,15 +570,15 @@ with tabs[3]:
                         max_tokens=700,
                     )
                     response_text = completion.choices[0].message.content.strip()
-
-                    st.session_state.active_chat.append(
-                        {"role": "assistant", "content": response_text}
-                    )
+    
+                    # Append response and re-render
+                    st.session_state.active_chat.append({"role": "assistant", "content": response_text})
                     st.rerun()
                 except Exception as e:
                     st.error(f"Chat failed: {e}")
 
-        # ---------------- New Chat button ----------------
+
+        # --- New Chat Button ---
         if st.session_state.active_chat:
             st.divider()
             if st.button("New Chat", use_container_width=True):
@@ -545,7 +586,6 @@ with tabs[3]:
                     preview_text = " ".join(
                         [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
                     )[:600]
-
                     summary_prompt = (
                         "Summarize this conversation in 3–5 plain words, no emojis or punctuation. "
                         "Example: 'European collectors trends'.\n\n"
