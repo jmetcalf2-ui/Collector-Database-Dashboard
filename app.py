@@ -436,7 +436,6 @@ with tabs[2]:
 # === CHAT TAB ============================================
 # =========================================================
 with tabs[3]:
-    st.markdown("<h2>Chats</h2>", unsafe_allow_html=True)
 
     # Load system prompt
     sys_path = Path("prompts/system_prompt.md")
@@ -450,9 +449,12 @@ with tabs[3]:
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+    # Two-column layout
     left, right = st.columns([2.4, 6.6], gap="large")
 
-    # LEFT — Chat history list
+    # -----------------------------------------------------
+    # LEFT COLUMN — CHAT HISTORY
+    # -----------------------------------------------------
     with left:
         st.markdown("<h3 class='chat-header'>Chats</h3>", unsafe_allow_html=True)
 
@@ -465,19 +467,28 @@ with tabs[3]:
                     st.session_state.active_chat = session["history"].copy()
                     st.rerun()
 
-    # RIGHT — Chat window
+    # -----------------------------------------------------
+    # RIGHT COLUMN — ACTIVE CHAT
+    # -----------------------------------------------------
     with right:
         st.markdown("<h3 class='current-chat-header'>Current Chat</h3>", unsafe_allow_html=True)
 
-        # render messages
+        # Render chat messages
         for msg in st.session_state.active_chat:
             if msg["role"] == "user":
-                st.markdown(f"<div class='message-user'>{msg['content']}</div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div class='message-user'>{msg['content']}</div>",
+                    unsafe_allow_html=True
+                )
             else:
-                st.markdown(f"<div class='message-assistant'>{msg['content']}</div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div class='message-assistant'>{msg['content']}</div>",
+                    unsafe_allow_html=True
+                )
 
         st.markdown("<div style='clear: both;'></div>", unsafe_allow_html=True)
 
+        # Chat input
         user_input = st.chat_input("Ask a question…")
 
         if user_input:
@@ -502,10 +513,12 @@ with tabs[3]:
                 except Exception as e:
                     st.error(f"Chat failed: {e}")
 
-        # New chat
+        # New chat button
         if st.session_state.active_chat:
             st.divider()
+
             if st.button("New Chat", use_container_width=True):
+
                 preview = " ".join(
                     [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
                 )[:600]
