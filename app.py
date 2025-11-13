@@ -320,14 +320,9 @@ with tabs[1]:
             country_val = lead.get("country") or ""
 
             # CLICKABLE ROW
-            name_to_tier = "&nbsp;" * 16
-            tier_to_email = "&nbsp;" * 14
-            
-            label = (
-                f"{name}{name_to_tier}|{name_to_tier}"
-                f"Tier: {tier}{tier_to_email}|{tier_to_email}{email_val}"
-            )
-            
+            # Fixed-width formatting to align with grid header (2fr / 1fr / 2fr)
+            label = f"{name:<61}Tier: {tier:<30}{email_val}"
+
             with st.expander(label, expanded=False):
                 st.markdown("", unsafe_allow_html=True)
 
