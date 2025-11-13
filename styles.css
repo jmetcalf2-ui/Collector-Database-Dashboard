@@ -1,113 +1,154 @@
-/* Helvetica-forward, light minimal design */
+/* ----------------------------------------------------------
+   GLOBAL TYPOGRAPHY + COLOR SYSTEM
+----------------------------------------------------------- */
+:root {
+  --font: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif;
+  --text: #0f0f0f;
+  --subtle-text: #6f6f6f;
+  --border: #e5e5e5;
+  --border-dark: #d0d0d0;
+  --card-bg: #ffffff;
+  --background: #fafafa;
+  --hover-bg: #f5f5f5;
+  --accent: #3c7df0;
+}
+
 html, body, [class*="css"] {
-  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif !important;
-  color: #111 !important;
-  background-color: #ffffff !important;
+  font-family: var(--font) !important;
+  background: var(--background) !important;
+  color: var(--text) !important;
+  line-height: 1.45 !important;
 }
 
-/* --- LAYOUT CLEANUP: Remove sidebar and enforce full-width --- */
-section[data-testid="stSidebar"] {
-  display: none !important;
-}
+/* ----------------------------------------------------------
+   REMOVE SIDEBAR
+----------------------------------------------------------- */
+section[data-testid="stSidebar"] { display:none !important; }
 
-/* --- Center main dashboard content nicely --- */
+/* ----------------------------------------------------------
+   MAIN CONTAINER (centered + spacing)
+----------------------------------------------------------- */
 .block-container {
-  max-width: 1400px !important;       /* limit content width */
-  margin: 0 auto !important;          /* center horizontally */
-  padding-top: 2rem !important;
-  padding-bottom: 3rem !important;
-  padding-left: 4rem !important;      /* roughly 1 inch (~96px) */
-  padding-right: 4rem !important;     /* roughly 1 inch (~96px) */
+  max-width: 1350px !important;
+  padding: 3rem 2rem 5rem 2rem !important;
+  margin: 0 auto !important;
 }
 
-/* Ensure main container stays centered and clean */
-main[data-testid="stAppViewContainer"] {
-  display: flex;
-  justify-content: center;
-  background-color: #ffffff !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+/* ----------------------------------------------------------
+   HEADINGS
+----------------------------------------------------------- */
+h1, h2, h3, h4 {
+  font-weight: 600 !important;
+  letter-spacing: -0.2px !important;
+  color: var(--text) !important;
 }
 
-/* Typography */
-h1, h2, h3 {
-  letter-spacing: 0.2px;
-  font-weight: 500;
-  color: #111 !important;
+h1 { font-size: 2.4rem !important; margin-bottom: 1rem !important; }
+h2 { font-size: 1.55rem !important; margin-top: 2rem !important; }
+
+/* ----------------------------------------------------------
+   CARDS / EXPANDERS
+----------------------------------------------------------- */
+.card, .streamlit-expanderHeader {
+  background: var(--card-bg) !important;
+  border-radius: 14px !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04) !important;
 }
 
-/* Card containers */
-.card {
-  background: #fff;
-  border-radius: 16px;
-  padding: 1rem 1.2rem;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.05);
-  border: 1px solid #f1f1f1;
-  margin-top: 1.2rem;
+/* Expander Title Background */
+details summary {
+  background: var(--card-bg) !important;
+  padding: 0.8rem 1rem !important;
+  border-radius: 12px !important;
+  cursor: pointer !important;
 }
 
-/* Badges / tags */
-.badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: #f7f7f7;
-  font-size: 12px;
-  margin-right: 6px;
+details[open] summary {
+  border-bottom: 1px solid var(--border) !important;
 }
 
-/* Soft divider lines */
-hr.soft {
-  border: none;
-  border-top: 1px solid #f0f0f0;
-  margin: 1.5rem 0 1rem 0;
+/* Inside expander */
+details > div {
+  padding: 1rem 1.2rem !important;
 }
 
-/* Remove empty Streamlit “ghost” containers */
-div[data-testid="stVerticalBlock"] > div:empty,
-div[data-testid="stHorizontalBlock"] > div:empty,
-div[data-testid="stBlock"] > div:empty,
-div[data-testid="stVerticalBlockBorderWrapper"] > div:empty {
-  display: none !important;
-  height: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
+/* ----------------------------------------------------------
+   INPUTS / SELECTS
+----------------------------------------------------------- */
+input, textarea, select, .stTextInput input {
+  border-radius: 8px !important;
+  border: 1px solid var(--border-dark) !important;
+  background: #fff !important;
+  padding: 0.45rem 0.6rem !important;
+  font-size: 0.92rem !important;
 }
 
-/* Remove lingering “input-style” artifacts */
-div[data-testid="stTextInputRootElement"] > div:empty {
-  display: none !important;
-}
-
-/* Tighten spacing between cards */
-div.block-container > div:has(> div.card) {
-  margin-top: 0 !important;
-}
-
-/* Improve button and input aesthetics globally */
-button[kind="primary"], button[kind="secondary"], button {
-  border-radius: 6px !important;
+/* ----------------------------------------------------------
+   BUTTONS
+----------------------------------------------------------- */
+button, .stButton > button {
+  border-radius: 8px !important;
+  padding: 0.55rem 0.85rem !important;
   font-weight: 500 !important;
-  letter-spacing: 0.2px !important;
+  border: 1px solid var(--border-dark) !important;
+  background: #fff !important;
+  color: var(--text) !important;
+  transition: 0.1s ease-in-out !important;
 }
 
-input, textarea, select {
-  border-radius: 6px !important;
-  border: 1px solid #e0e0e0 !important;
-  box-shadow: none !important;
+button:hover, .stButton > button:hover {
+  background: var(--hover-bg) !important;
+  border-color: var(--border) !important;
 }
 
-/* Streamlit scrollbar cleanup */
-::-webkit-scrollbar {
-  width: 6px;
+/* Danger button */
+button[kind="danger"], .stButton > button[kind="danger"] {
+  background: #ffefef !important;
+  border-color: #ffbcbc !important;
+  color: #b42525 !important;
 }
+button[kind="danger"]:hover {
+  background: #ffdede !important;
+}
+
+/* ----------------------------------------------------------
+   GRID LISTING (CONTACT CARDS)
+----------------------------------------------------------- */
+.contact-card {
+  padding: 1rem !important;
+  border-radius: 14px !important;
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.03) !important;
+  margin-bottom: 1.1rem !important;
+}
+
+/* Name */
+.contact-card h4 {
+  margin: 0 !important;
+  font-weight: 600 !important;
+  color: var(--text) !important;
+}
+
+/* Location + role */
+.contact-meta {
+  font-size: 0.86rem !important;
+  color: var(--subtle-text) !important;
+  margin-bottom: 0.4rem !important;
+}
+
+/* ----------------------------------------------------------
+   DIVIDERS
+----------------------------------------------------------- */
+hr { border-top: 1px solid var(--border) !important; }
+
+/* ----------------------------------------------------------
+   SCROLLBAR
+----------------------------------------------------------- */
+::-webkit-scrollbar { width: 7px; }
 ::-webkit-scrollbar-thumb {
-  background: #d4d4d4;
-  border-radius: 4px;
+  background: #cfcfcf;
+  border-radius: 100px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #bcbcbc;
-}
+::-webkit-scrollbar-thumb:hover { background: #b0b0b0; }
