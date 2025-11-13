@@ -138,3 +138,8 @@ div[data-testid="stButton"] > button:hover {
   float: left;
   clear: both;
 }
+
+.expander-label-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  white-space: pre; /* preserves spaces */
+}
