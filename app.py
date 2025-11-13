@@ -324,8 +324,8 @@ with tabs[1]:
             tier_to_email = "&nbsp;" * 37
             
             label = (
-                f"{name}{name_to_tier}|{name_to_tier}"
-                f"Tier: {tier}{tier_to_email}|{tier_to_email}{email_val}"
+                f"{name}{name_to_tier} {name_to_tier}"
+                f"Tier: {tier}{tier_to_email} {tier_to_email}{email_val}"
             )
 
             with st.expander(label, expanded=False):
