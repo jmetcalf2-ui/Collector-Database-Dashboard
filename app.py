@@ -322,23 +322,26 @@ with tabs[1]:
               # -----------------------------
             # DYNAMIC SPACING FOR LABEL
             # -----------------------------
-            TIER_COL = 75      # Tier always starts 75 characters from left
-            EMAIL_COL = 120    # Email starts at column 120 (adjust as needed)
+            TIER_COL = 75      # target column for 'Tier:'
+            EMAIL_COL = 120    # target column for email start (tweak as needed)
             
-            def nbsp(n):
+            def nbsp(n: int) -> str:
                 return "&nbsp;" * max(n, 1)  # ensure at least 1 space
             
             tier_text = f"Tier: {tier}"
             
-            # Tier spacing: always 75 from left
-            name_to_tier = nbsp(TIER_COL)
+            # how many spaces needed after the name so 'Tier:' starts at TIER_COL
+            name_len = len(name)
+            spaces_after_name = max(TIER_COL - name_len, 1)
+            name_to_tier = nbsp(spaces_after_name)
             
-            # Email spacing: always EMAIL_COL from left
-            tier_to_email = nbsp(EMAIL_COL - TIER_COL - len(tier_text))
+            # how many spaces between 'Tier: ...' and email so email starts at EMAIL_COL
+            tier_len = len(tier_text)
+            spaces_after_tier = max(EMAIL_COL - (TIER_COL + tier_len), 1)
+            tier_to_email = nbsp(spaces_after_tier)
             
             label = f"{name}{name_to_tier}{tier_text}{tier_to_email}{email_val}"
-
-        
+            
             with st.expander(label, expanded=False):
                 st.markdown("", unsafe_allow_html=True)
 
