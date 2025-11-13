@@ -322,28 +322,14 @@ with tabs[1]:
               # -----------------------------
             # DYNAMIC SPACING FOR LABEL
             # -----------------------------
-            TIER_COL = 75      # target column for 'Tier:'
-            EMAIL_COL = 120    # target column for email start (tweak as needed)
+            # Fixed-width text columns using a monospace label
+            raw_label = f"{name:<30}Tier: {tier:<10}{email_val}"
             
-            def nbsp(n: int) -> str:
-                return "&nbsp;" * max(n, 1)  # ensure at least 1 space
-            
-            tier_text = f"Tier: {tier}"
-            
-            # how many spaces needed after the name so 'Tier:' starts at TIER_COL
-            name_len = len(name)
-            spaces_after_name = max(TIER_COL - name_len, 1)
-            name_to_tier = nbsp(spaces_after_name)
-            
-            # how many spaces between 'Tier: ...' and email so email starts at EMAIL_COL
-            tier_len = len(tier_text)
-            spaces_after_tier = max(EMAIL_COL - (TIER_COL + tier_len), 1)
-            tier_to_email = nbsp(spaces_after_tier)
-            
-            label = f"{name}{name_to_tier}{tier_text}{tier_to_email}{email_val}"
+            label = f"<span class='expander-label-mono'>{raw_label}</span>"
             
             with st.expander(label, expanded=False):
                 st.markdown("", unsafe_allow_html=True)
+
 
                 # -----------------------------
                 # DETAILS SECTION
