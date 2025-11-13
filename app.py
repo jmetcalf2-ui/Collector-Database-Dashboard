@@ -287,6 +287,30 @@ with tabs[1]:
             leads = []
 
         # -------------------------------------------------------
+        # CSS FIX FOR ALIGNING EXPANDER LABELS
+        # -------------------------------------------------------
+        st.markdown("""
+        <style>
+        details > summary {
+            display: grid !important;
+            grid-template-columns: 2fr 1fr 2fr !important;
+            width: 100% !important;
+            padding-right: 20px !important;
+            font-size: 14px !important;
+        }
+        details > summary::-webkit-details-marker {
+            display: none;
+        }
+        details > summary:after {
+            content: "▾";
+            justify-self: end;
+            padding-left: 12px;
+            color: #666;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+        # -------------------------------------------------------
         # TABLE HEADER
         # -------------------------------------------------------
         st.markdown("""
@@ -422,7 +446,6 @@ with tabs[1]:
             if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
                 st.session_state.data_page += 1
                 st.rerun()
-
 
 # =========================================================
 # === SAVED SETS TAB ======================================
