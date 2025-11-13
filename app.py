@@ -321,7 +321,7 @@ with tabs[1]:
 
             # CLICKABLE ROW
             name_to_tier = "&nbsp;" * 75
-            tier_to_email = "&nbsp;" * 14
+            tier_to_email = "&nbsp;" * 35
             
             label = (
                 f"{name}{name_to_tier}|{name_to_tier}"
