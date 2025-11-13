@@ -6,6 +6,13 @@ from openai import OpenAI
 from datetime import datetime
 from pathlib import Path
 
+# Disable Streamlit's native red underline so only our CSS underline shows
+st.markdown("""
+<style>
+div[data-baseweb="tab-highlight"] { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
+
 # ---------------------------------------------------------
 # PAGE SETUP
 # ---------------------------------------------------------
