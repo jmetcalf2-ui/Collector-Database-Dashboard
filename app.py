@@ -196,138 +196,98 @@ with tabs[0]:
         else:
             st.info("No leads found.")
 
-# ======================================================================
-# === CONTACTS TAB ======================================================
-# ======================================================================
-with tabs[1]:
+# -------------------------------------------------------
+# CONTACTS TABLE — NEW CLEAN SPREADSHEET STYLE
+# -------------------------------------------------------
+if not supabase:
+    st.warning("Database unavailable.")
+else:
+    per_page = 20
+    if "data_page" not in st.session_state:
+        st.session_state.data_page = 0
 
-    st.markdown("## Contacts")
+    offset = st.session_state.data_page * per_page
 
-    # -------------------------------------------------------
-    # CREATE CONTACT FORM
-    # -------------------------------------------------------
-    with st.expander("Create a Contact", expanded=False):
-        with st.form("create_contact_form"):
-            st.markdown("Enter contact details to add a new record:")
+    # Count rows
+    try:
+        total_response = supabase.table("leads").select("*", count="exact").limit(1).execute()
+        total_count = total_response.count or 0
+    except Exception:
+        total_count = 0
 
-            full_name = st.text_input("Full Name")
-            email = st.text_input("Email")
-            primary_role = st.text_input("Primary Role")
-            city = st.text_input("City")
-            country = st.text_input("Country")
-            tier = st.selectbox("Tier", ["A", "B", "C", "—"], index=3)
-            notes = st.text_area("Notes", height=100)
+    total_pages = max(1, (total_count + per_page - 1) // per_page)
 
-            submitted = st.form_submit_button("Create Contact")
+    st.caption(
+        f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total contacts"
+    )
 
-            if submitted:
-                if not full_name or not email:
-                    st.warning("Please provide at least a name and email.")
-                else:
-                    try:
-                        response = (
-                            supabase.table("leads")
-                            .insert({
-                                "full_name": full_name.strip(),
-                                "email": email.strip(),
-                                "primary_role": primary_role.strip() or None,
-                                "city": city.strip() or None,
-                                "country": country.strip() or None,
-                                "tier": None if tier == "—" else tier,
-                                "notes": notes.strip() or None,
-                            })
-                            .execute()
-                        )
-                        if getattr(response, "status_code", 400) < 300:
-                            st.success(f"{full_name} added.")
-                            st.rerun()
-                        else:
-                            st.error(f"Insert failed: {response}")
-                    except Exception as e:
-                        st.error(f"Error creating contact: {e}")
-
-    st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
+    # Fetch leads
+    leads = (
+        supabase.table("leads")
+        .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
+        .order("full_name")
+        .range(offset, offset + per_page - 1)
+        .execute()
+        .data or []
+    )
 
     # -------------------------------------------------------
-    # CONTACT TABLE — SPREADSHEET STYLE
+    # TABLE HEADER
     # -------------------------------------------------------
-    if not supabase:
-        st.warning("Database unavailable.")
-    else:
-        per_page = 20
-        if "data_page" not in st.session_state:
-            st.session_state.data_page = 0
+    st.markdown("""
+    <div style="
+        display: grid;
+        grid-template-columns: 2fr 1fr 2fr;
+        padding: 8px 12px;
+        font-weight: 600;
+        font-size: 14px;
+        border-bottom: 1px solid #eee;
+        color: #444;
+    ">
+        <div>Name</div>
+        <div>Tier</div>
+        <div>Email</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-        offset = st.session_state.data_page * per_page
+    # -------------------------------------------------------
+    # INTERACTIVE TABLE ROWS
+    # -------------------------------------------------------
+    for lead in leads:
+        lead_key = lead["lead_id"]
+        name = lead.get("full_name") or "Unnamed"
+        tier = lead.get("tier") or "—"
+        email_val = lead.get("email") or "—"
+        role_val = lead.get("primary_role") or "—"
+        city_val = lead.get("city") or ""
+        country_val = lead.get("country") or ""
 
-        # Count rows
-        try:
-            total_response = supabase.table("leads").select("*", count="exact").limit(1).execute()
-            total_count = total_response.count or 0
-        except Exception:
-            total_count = 0
+        row_id = f"row_{lead_key}"
 
-        total_pages = max(1, (total_count + per_page - 1) // per_page)
-
-        st.caption(
-            f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total contacts"
+        # Row grid (clickable)
+        clicked = st.toggle(
+            "",
+            key=row_id,
+            label_visibility="collapsed"
         )
 
-        # Fetch leads
-        try:
-            leads = (
-                supabase.table("leads")
-                .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
-                .order("full_name", desc=False)
-                .range(offset, offset + per_page - 1)
-                .execute()
-                .data or []
-            )
-        except Exception:
-            leads = []
-
-        # -------------------------------------------------------
-        # TABLE HEADER
-        # -------------------------------------------------------
-        st.markdown("""
+        st.markdown(f"""
         <div style="
             display: grid;
             grid-template-columns: 2fr 1fr 2fr;
-            padding: 8px 12px;
-            font-weight: 600;
-            font-size: 14px;
-            border-bottom: 1px solid #eee;
-            color: #444;
+            padding: 10px 12px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
         ">
-            <div>Name</div>
-            <div>Tier</div>
-            <div>Email</div>
+            <div><b>{name}</b></div>
+            <div>{tier}</div>
+            <div>{email_val}</div>
         </div>
         """, unsafe_allow_html=True)
 
-        # -------------------------------------------------------
-        # TABLE ROWS
-        # -------------------------------------------------------
-        for lead in leads:
-            lead_key = str(lead["lead_id"])
-            summary_key = f"summary_{lead_key}"
-
-            name = lead.get("full_name") or "Unnamed"
-            tier = lead.get("tier") or "—"
-            email_val = lead.get("email") or "—"
-            role_val = lead.get("primary_role") or "—"
-            city_val = lead.get("city") or ""
-            country_val = lead.get("country") or ""
-
-            # CLICKABLE ROW
-            with st.expander(
-                f"{name} | Tier {tier} | {email_val}",
-                expanded=False
-            ):
-
-                # -----------------------------
-                # DETAILS SECTION
-                # -----------------------------
+        # When clicked, reveal dropdown
+        if clicked:
+            with st.container(border=True):
                 st.markdown(f"### {name}")
 
                 if city_val or country_val:
@@ -338,91 +298,59 @@ with tabs[1]:
 
                 st.markdown("---")
 
-                # -----------------------------
-                # ACTION BUTTONS
-                # -----------------------------
-                action_col1, action_col2, action_col3 = st.columns([2, 2, 1])
+                c1, c2, c3 = st.columns([2,2,1])
 
-                # Summarize
-                with action_col1:
-                    if summary_key not in st.session_state:
-                        if st.button(f"Summarize {name}", key=f"summ_{lead_key}"):
-                            with st.spinner("Summarizing…"):
-                                try:
-                                    supplements = (
-                                        supabase.table("leads_supplements")
-                                        .select("notes")
-                                        .eq("lead_id", lead_key)
-                                        .execute()
-                                        .data or []
-                                    )
+                # Summarize button
+                with c1:
+                    if st.button(f"Summarize {name}", key=f"summ_{lead_key}"):
+                        with st.spinner("Summarizing…"):
+                            supplements = (
+                                supabase.table("leads_supplements")
+                                .select("notes")
+                                .eq("lead_id", lead_key)
+                                .execute()
+                                .data or []
+                            )
 
-                                    base_notes = lead.get("notes") or ""
-                                    supplement_notes = "\n\n".join(
-                                        (s.get("notes") or "").strip()
-                                        for s in supplements
-                                    )
+                            base_notes = lead.get("notes") or ""
+                            supplement_notes = "\n\n".join(
+                                (s.get("notes") or "").strip()
+                                for s in supplements
+                            )
 
-                                    combined_notes = (
-                                        base_notes
-                                        + ("\n\n" if base_notes and supplement_notes else "")
-                                        + supplement_notes
-                                    ).strip()
+                            combined_notes = (
+                                base_notes
+                                + ("\n\n" if base_notes and supplement_notes else "")
+                                + supplement_notes
+                            ).strip()
 
-                                    summary = summarize_collector(lead_key, combined_notes)
-                                    st.session_state[summary_key] = summary
-                                    st.rerun()
+                            summary = summarize_collector(str(lead_key), combined_notes)
+                            st.markdown("### Notes")
+                            st.markdown(summary, unsafe_allow_html=True)
 
-                                except Exception as e:
-                                    st.error(f"Error: {e}")
-                    else:
-                        st.markdown("### Notes")
-                        st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
-
-                # Add to Saved Set
-                with action_col2:
+                # Save
+                with c2:
                     st.button("Add to Saved Set", key=f"save_{lead_key}")
 
                 # Delete
-                with action_col3:
+                with c3:
                     if st.button("Delete", key=f"del_{lead_key}"):
                         st.session_state[f"confirm_delete_{lead_key}"] = True
 
-                # Confirm deletion
                 if st.session_state.get(f"confirm_delete_{lead_key}", False):
                     st.warning(f"Delete {name}?")
+
                     yes = st.button("Yes", key=f"yes_{lead_key}")
                     no = st.button("No", key=f"no_{lead_key}")
 
                     if yes:
-                        try:
-                            supabase.table("leads").delete().eq("lead_id", lead_key).execute()
-                            st.success("Deleted.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Delete failed: {e}")
+                        supabase.table("leads").delete().eq("lead_id", lead_key).execute()
+                        st.success("Deleted.")
+                        st.rerun()
 
                     if no:
                         st.session_state[f"confirm_delete_{lead_key}"] = False
                         st.rerun()
-
-        # -------------------------------------------------------
-        # PAGINATION
-        # -------------------------------------------------------
-        st.markdown("<hr>", unsafe_allow_html=True)
-
-        left, prev, nxt, right = st.columns([2, 1, 1, 2])
-
-        with prev:
-            if st.button("Previous", disabled=st.session_state.data_page == 0):
-                st.session_state.data_page -= 1
-                st.rerun()
-
-        with nxt:
-            if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
-                st.session_state.data_page += 1
-                st.rerun()
-
 
 # =========================================================
 # === SAVED SETS TAB ======================================
