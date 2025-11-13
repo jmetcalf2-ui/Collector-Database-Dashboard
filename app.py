@@ -432,69 +432,104 @@ with tabs[2]:
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
 
-# =========================================================
-# === CHAT TAB ============================================
-# =========================================================
+# ======================================================================
+# === CHAT TAB ===
+# ======================================================================
 with tabs[3]:
 
-    # Load system prompt
-    sys_path = Path("prompts/system_prompt.md")
-    if sys_path.exists():
-        system_prompt = sys_path.read_text().strip()
+    # --- System prompt setup ---
+    system_prompt_path = Path("prompts/system_prompt.md")
+    if system_prompt_path.exists():
+        system_prompt = system_prompt_path.read_text().strip()
     else:
         system_prompt = (
             "You are CollectorGPT — a helpful art-market assistant. "
-            "Be factual, concise, and specific to collectors."
+            "You answer questions conversationally, referencing collectors, artists, "
+            "galleries, and market trends when relevant. Keep responses factual and concise."
         )
 
+    # --- OpenAI client ---
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # Two-column layout
-    left, right = st.columns([2.4, 6.6], gap="large")
+    # --- Layout (two-column like Contacts tab) ---
+    chat_container_full = st.container()
 
-    # -----------------------------------------------------
+    with chat_container_full:
+        left, right = st.columns([2.4, 6.6], gap="large")
+
+    # ================================================================
     # LEFT COLUMN — CHAT HISTORY
-    # -----------------------------------------------------
+    # ================================================================
     with left:
-        st.markdown("<h3 class='chat-header'>Chats</h3>", unsafe_allow_html=True)
+        st.markdown("## Chats")   # <-- MATCHES CONTACTS SIZE
 
         if not st.session_state.chat_sessions:
             st.info("No previous chats.")
         else:
             for i, session in enumerate(reversed(st.session_state.chat_sessions)):
-                label = session.get("summary", "Untitled chat")
-                if st.button(label, key=f"chat_{i}", use_container_width=True):
+                summary = session.get("summary", "Untitled chat")
+                if st.button(summary, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
                     st.session_state.active_chat = session["history"].copy()
                     st.rerun()
 
-    # -----------------------------------------------------
-    # RIGHT COLUMN — ACTIVE CHAT
-    # -----------------------------------------------------
+    # ================================================================
+    # RIGHT COLUMN — CURRENT CHAT
+    # ================================================================
     with right:
-        st.markdown("<h3 class='current-chat-header'>Current Chat</h3>", unsafe_allow_html=True)
+        st.markdown("## Current Chat")   # <-- FIXED HEADER SIZE
 
-        # Render chat messages
+        chat_box = st.container()
+
+        # Render chat history messages
         for msg in st.session_state.active_chat:
             if msg["role"] == "user":
                 st.markdown(
-                    f"<div class='message-user'>{msg['content']}</div>",
+                    f"""
+                    <div style="
+                        background:#e8eef8;
+                        padding:12px 15px;
+                        border-radius:14px;
+                        margin:10px 0;
+                        max-width:75%;
+                        float:right;
+                        clear:both;
+                    ">
+                        {msg['content']}
+                    </div>
+                    """,
                     unsafe_allow_html=True
                 )
             else:
                 st.markdown(
-                    f"<div class='message-assistant'>{msg['content']}</div>",
+                    f"""
+                    <div style="
+                        background:#ffffff;
+                        padding:12px 15px;
+                        border-radius:14px;
+                        margin:10px 0;
+                        max-width:75%;
+                        float:left;
+                        clear:both;
+                        border:1px solid #ececec;
+                    ">
+                        {msg['content']}
+                    </div>
+                    """,
                     unsafe_allow_html=True
                 )
 
-        st.markdown("<div style='clear: both;'></div>", unsafe_allow_html=True)
+        # Clear float
+        st.markdown("<div style='clear:both'></div>", unsafe_allow_html=True)
 
-        # Chat input
+        # ================================================================
+        # CHAT INPUT
+        # ================================================================
         user_input = st.chat_input("Ask a question…")
 
         if user_input:
             st.session_state.active_chat.append({"role": "user", "content": user_input})
 
-            with st.spinner("Thinking…"):
+            with st.spinner("Thinking..."):
                 try:
                     messages = [{"role": "system", "content": system_prompt}]
                     messages.extend(st.session_state.active_chat)
@@ -506,37 +541,40 @@ with tabs[3]:
                         max_tokens=700,
                     )
 
-                    response_text = completion.choices[0].message.content
-                    st.session_state.active_chat.append({"role": "assistant", "content": response_text})
+                    reply = completion.choices[0].message.content.strip()
+                    st.session_state.active_chat.append({"role": "assistant", "content": reply})
+
                     st.rerun()
 
                 except Exception as e:
                     st.error(f"Chat failed: {e}")
 
-        # New chat button
+        # ================================================================
+        # NEW CHAT BUTTON
+        # ================================================================
         if st.session_state.active_chat:
             st.divider()
-
             if st.button("New Chat", use_container_width=True):
 
-                preview = " ".join(
-                    [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
-                )[:600]
-
                 try:
+                    preview_text = " ".join(
+                        [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
+                    )[:600]
+
                     summary_prompt = (
-                        "Summarize this chat in 3–5 plain words, no emojis.\n\n"
-                        f"{preview}"
+                        "Summarize this conversation in 3–5 plain words. No emojis.\n\n"
+                        f"{preview_text}"
                     )
 
                     summary_resp = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[{"role": "user", "content": summary_prompt}],
                         max_tokens=20,
-                        temperature=0.4,
+                        temperature=0.5,
                     )
 
                     summary_text = summary_resp.choices[0].message.content.strip()
+
                 except Exception:
                     summary_text = "Untitled chat"
 
