@@ -322,8 +322,6 @@ with tabs[1]:
               # -----------------------------
             # DYNAMIC SPACING FOR LABEL
             # -----------------------------
-            # Rough "column" positions (tweak these numbers until it visually lines up)
-            # Fixed column positions from LEFT EDGE
             TIER_COL = 75      # Tier always starts 75 characters from left
             EMAIL_COL = 120    # Email starts at column 120 (adjust as needed)
             
@@ -339,6 +337,7 @@ with tabs[1]:
             tier_to_email = nbsp(EMAIL_COL - TIER_COL - len(tier_text))
             
             label = f"{name}{name_to_tier}{tier_text}{tier_to_email}{email_val}"
+
         
             with st.expander(label, expanded=False):
                 st.markdown("", unsafe_allow_html=True)
