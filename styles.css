@@ -21,11 +21,6 @@ section[data-testid="stSidebar"] {
    REMOVE TAB BUBBLES — KEEP ONLY OUR RED UNDERLINE
 ----------------------------------------------------------- */
 
-/* Remove Streamlit's default red underline */
-div[data-baseweb="tab-highlight"] {
-  display: none !important;
-}
-
 /* Style tab labels */
 div.stTabs [data-baseweb="tab-list"] {
   gap: 2.2rem !important;
