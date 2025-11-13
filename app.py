@@ -248,7 +248,7 @@ with tabs[1]:
     st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
     # -------------------------------------------------------
-    # PAGINATION SETUP
+    # PAGINATION
     # -------------------------------------------------------
     if "data_page" not in st.session_state:
         st.session_state.data_page = 0
@@ -276,13 +276,13 @@ with tabs[1]:
     )
 
     # -------------------------------------------------------
-    # FETCH LEADS (A→Z)
+    # FETCH LEADS
     # -------------------------------------------------------
     try:
         leads = (
             supabase.table("leads")
             .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
-            .order("full_name", desc=False)        # ← FIXED
+            .order("full_name", desc=False)
             .range(offset, offset + per_page - 1)
             .execute()
             .data or []
@@ -312,7 +312,7 @@ with tabs[1]:
     """, unsafe_allow_html=True)
 
     # -------------------------------------------------------
-    # TABLE ROWS — SAFE expanders
+    # SAFE EXPANDERS (NO HTML LABELS)
     # -------------------------------------------------------
     for lead in leads:
         lead_id = str(lead["lead_id"])
@@ -320,17 +320,25 @@ with tabs[1]:
         tier = lead.get("tier") or "—"
         email_val = lead.get("email") or "—"
 
-        # ❗ SAFE ONE-LINE EXPANDER LABEL
-        exp_label = (
-            f"<div style='display:grid;grid-template-columns:2fr 1fr 2fr;"
-            f"padding:10px 10px;font-size:14px;'>"
-            f"<div>{name}</div>"
-            f"<div>{tier}</div>"
-            f"<div>{email_val}</div>"
-            f"</div>"
-        )
+        # Expander label must be plain text
+        exp_label = f"{name} | Tier {tier} | {email_val}"
 
-        with st.expander(exp_label, unsafe_allow_html=True):
+        with st.expander(exp_label):
+
+            # Now show the spreadsheet row INSIDE the expander
+            st.markdown(f"""
+            <div style="
+                display:grid;
+                grid-template-columns:2fr 1fr 2fr;
+                padding:10px 10px;
+                font-size:14px;
+                margin-bottom:10px;
+            ">
+                <div>{name}</div>
+                <div>{tier}</div>
+                <div>{email_val}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
             st.markdown(f"### {name}")
 
@@ -346,11 +354,10 @@ with tabs[1]:
             st.write(f"**Tier:** {tier}")
 
             # ---------------------------------------------------
-            # BUTTONS — LEFT ALIGNED
+            # BUTTONS (left aligned)
             # ---------------------------------------------------
             btn1, btn2, btn3 = st.columns([1, 1, 1])
 
-            # Summarize
             with btn1:
                 if st.button("Summarize", key=f"sum_{lead_id}"):
                     supplements = (
@@ -360,7 +367,6 @@ with tabs[1]:
                         .execute()
                         .data or []
                     )
-
                     base_notes = lead.get("notes") or ""
                     supplement_notes = "\n\n".join(
                         (s.get("notes") or "") for s in supplements
@@ -371,11 +377,9 @@ with tabs[1]:
                     st.markdown("### Summary")
                     st.markdown(summary)
 
-            # Add to saved set
             with btn2:
                 st.button("Add to Saved Set", key=f"save_{lead_id}")
 
-            # Delete
             with btn3:
                 if st.button("Delete", key=f"del_{lead_id}"):
                     st.session_state[f"confirm_delete_{lead_id}"] = True
@@ -399,7 +403,7 @@ with tabs[1]:
                         st.rerun()
 
     # -------------------------------------------------------
-    # PAGINATION BUTTONS — ALIGNED SIDE-BY-SIDE
+    # PAGINATION BUTTONS
     # -------------------------------------------------------
     st.markdown("<hr>", unsafe_allow_html=True)
 
