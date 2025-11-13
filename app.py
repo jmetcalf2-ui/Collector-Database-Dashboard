@@ -6,13 +6,6 @@ from openai import OpenAI
 from datetime import datetime
 from pathlib import Path
 
-# Disable Streamlit's native red underline so only our CSS underline shows
-st.markdown("""
-<style>
-div[data-baseweb="tab-highlight"] { display: none !important; }
-</style>
-""", unsafe_allow_html=True)
-
 # ---------------------------------------------------------
 # PAGE SETUP
 # ---------------------------------------------------------
@@ -33,6 +26,13 @@ if "active_chat" not in st.session_state:
 
 # Header
 st.markdown("<h1>Dashboard</h1>", unsafe_allow_html=True)
+
+# Disable Streamlit's native red underline so only our CSS underline shows
+st.markdown("""
+<style>
+div[data-baseweb="tab-highlight"] { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # CONNECT SUPABASE
