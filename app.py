@@ -319,10 +319,12 @@ with tabs[1]:
             city_val = lead.get("city") or ""
             country_val = lead.get("country") or ""
 
-            # Plain-text label (no HTML)
-            label = f"{name}  |  Tier {tier}  |  {email_val}"
+            # CLICKABLE ROW
+            with st.expander(
+                f"{name} | Tier {tier} | {email_val}",
+                expanded=False
+            ):
 
-            with st.expander(label, expanded=False):
                 # -----------------------------
                 # DETAILS SECTION
                 # -----------------------------
@@ -420,6 +422,33 @@ with tabs[1]:
             if st.button("Next", disabled=st.session_state.data_page >= total_pages - 1):
                 st.session_state.data_page += 1
                 st.rerun()
+
+
+# =========================================================
+# === SAVED SETS TAB ======================================
+# =========================================================
+with tabs[2]:
+    st.markdown("<h2>Saved Sets</h2>", unsafe_allow_html=True)
+
+    if not supabase:
+        st.warning("Database unavailable.")
+    else:
+        sets = (
+            supabase.table("saved_sets")
+            .select("*")
+            .order("created_at", desc=True)
+            .execute()
+            .data
+            or []
+        )
+
+        if not sets:
+            st.info("No saved sets yet.")
+        else:
+            for s in sets:
+                with st.expander(s["name"]):
+                    st.write(f"**Description:** {s.get('description', '—')}")
+                    st.write(f"**Created:** {s.get('created_at', '—')}")
 
 # ======================================================================
 # === CHAT TAB ===
