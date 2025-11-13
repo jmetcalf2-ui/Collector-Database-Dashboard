@@ -1,154 +1,133 @@
-/* ----------------------------------------------------------
-   GLOBAL TYPOGRAPHY + COLOR SYSTEM
+/* -----------------------------------------------------------
+   BASE TYPOGRAPHY + LAYOUT
 ----------------------------------------------------------- */
-:root {
-  --font: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif;
-  --text: #0f0f0f;
-  --subtle-text: #6f6f6f;
-  --border: #e5e5e5;
-  --border-dark: #d0d0d0;
-  --card-bg: #ffffff;
-  --background: #fafafa;
-  --hover-bg: #f5f5f5;
-  --accent: #3c7df0;
-}
-
 html, body, [class*="css"] {
-  font-family: var(--font) !important;
-  background: var(--background) !important;
-  color: var(--text) !important;
-  line-height: 1.45 !important;
+  font-family: -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif !important;
+  background: #ffffff !important;
+  color: #111 !important;
 }
 
-/* ----------------------------------------------------------
-   REMOVE SIDEBAR
------------------------------------------------------------ */
-section[data-testid="stSidebar"] { display:none !important; }
+section[data-testid="stSidebar"] {
+  display: none !important;
+}
 
-/* ----------------------------------------------------------
-   MAIN CONTAINER (centered + spacing)
------------------------------------------------------------ */
 .block-container {
-  max-width: 1350px !important;
-  padding: 3rem 2rem 5rem 2rem !important;
+  max-width: 1400px !important;
   margin: 0 auto !important;
+  padding: 2rem 4rem !important;
 }
 
-/* ----------------------------------------------------------
-   HEADINGS
+/* -----------------------------------------------------------
+   REMOVE TAB BUBBLES — SUPABASE UNDERLINE STYLE
 ----------------------------------------------------------- */
-h1, h2, h3, h4 {
-  font-weight: 600 !important;
-  letter-spacing: -0.2px !important;
-  color: var(--text) !important;
+div.stTabs [data-baseweb="tab-list"] {
+  gap: 2rem !important;
+  border-bottom: 1px solid #eee !important;
+  padding-bottom: 6px !important;
 }
 
-h1 { font-size: 2.4rem !important; margin-bottom: 1rem !important; }
-h2 { font-size: 1.55rem !important; margin-top: 2rem !important; }
-
-/* ----------------------------------------------------------
-   CARDS / EXPANDERS
------------------------------------------------------------ */
-.card, .streamlit-expanderHeader {
-  background: var(--card-bg) !important;
-  border-radius: 14px !important;
-  border: 1px solid var(--border) !important;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.04) !important;
-}
-
-/* Expander Title Background */
-details summary {
-  background: var(--card-bg) !important;
-  padding: 0.8rem 1rem !important;
-  border-radius: 12px !important;
-  cursor: pointer !important;
-}
-
-details[open] summary {
-  border-bottom: 1px solid var(--border) !important;
-}
-
-/* Inside expander */
-details > div {
-  padding: 1rem 1.2rem !important;
-}
-
-/* ----------------------------------------------------------
-   INPUTS / SELECTS
------------------------------------------------------------ */
-input, textarea, select, .stTextInput input {
-  border-radius: 8px !important;
-  border: 1px solid var(--border-dark) !important;
-  background: #fff !important;
-  padding: 0.45rem 0.6rem !important;
-  font-size: 0.92rem !important;
-}
-
-/* ----------------------------------------------------------
-   BUTTONS
------------------------------------------------------------ */
-button, .stButton > button {
-  border-radius: 8px !important;
-  padding: 0.55rem 0.85rem !important;
+div.stTabs [data-baseweb="tab"] {
+  background: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-size: 14px !important;
   font-weight: 500 !important;
-  border: 1px solid var(--border-dark) !important;
-  background: #fff !important;
-  color: var(--text) !important;
-  transition: 0.1s ease-in-out !important;
+  border-radius: 0 !important;
+  color: #666 !important;
 }
 
-button:hover, .stButton > button:hover {
-  background: var(--hover-bg) !important;
-  border-color: var(--border) !important;
+div.stTabs [data-baseweb="tab"][aria-selected="true"] {
+  color: #111 !important;
+  border-bottom: 2px solid #e53935 !important;
 }
 
-/* Danger button */
-button[kind="danger"], .stButton > button[kind="danger"] {
-  background: #ffefef !important;
-  border-color: #ffbcbc !important;
-  color: #b42525 !important;
-}
-button[kind="danger"]:hover {
-  background: #ffdede !important;
+/* Remove tab hover ghosts */
+div.stTabs button:hover {
+  background: none !important;
 }
 
-/* ----------------------------------------------------------
-   GRID LISTING (CONTACT CARDS)
+/* -----------------------------------------------------------
+   FIX CHAT HEADER FONT SIZES
+----------------------------------------------------------- */
+h3, .chat-header, .current-chat-header {
+  font-size: 1.1rem !important;
+  font-weight: 600 !important;
+}
+
+/* -----------------------------------------------------------
+   INPUT + SELECT FIXES
+----------------------------------------------------------- */
+input, textarea, select, div[data-baseweb="select"] > div {
+  background: #ffffff !important;
+  border-radius: 6px !important;
+  border: 1px solid #e4e4e4 !important;
+  box-shadow: none !important;
+}
+
+/* Fix Streamlit selectbox weird white bubble */
+div[data-baseweb="select"] > div {
+  background: #ffffff !important;
+}
+
+/* -----------------------------------------------------------
+   CONTACT CARDS — REMOVE WEIRD WHITE BUBBLES
 ----------------------------------------------------------- */
 .contact-card {
-  padding: 1rem !important;
+  background: #fff !important;
+  border: 1px solid #f1f1f1 !important;
   border-radius: 14px !important;
-  background: var(--card-bg) !important;
-  border: 1px solid var(--border) !important;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.03) !important;
-  margin-bottom: 1.1rem !important;
+  padding: 1rem 1.2rem !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.04) !important;
+  margin-bottom: 1.2rem !important;
 }
 
-/* Name */
-.contact-card h4 {
+/* Remove ghost vertical gaps Streamlit adds */
+div[data-testid="stVerticalBlock"] > div:empty,
+div[data-testid="stHorizontalBlock"] > div:empty,
+div[data-testid="stBlock"] > div:empty,
+div[data-testid="stVerticalBlockBorderWrapper"] > div:empty {
+  display: none !important;
   margin: 0 !important;
-  font-weight: 600 !important;
-  color: var(--text) !important;
+  padding: 0 !important;
 }
 
-/* Location + role */
-.contact-meta {
-  font-size: 0.86rem !important;
-  color: var(--subtle-text) !important;
-  margin-bottom: 0.4rem !important;
-}
-
-/* ----------------------------------------------------------
-   DIVIDERS
+/* -----------------------------------------------------------
+   BUTTONS
 ----------------------------------------------------------- */
-hr { border-top: 1px solid var(--border) !important; }
-
-/* ----------------------------------------------------------
-   SCROLLBAR
------------------------------------------------------------ */
-::-webkit-scrollbar { width: 7px; }
-::-webkit-scrollbar-thumb {
-  background: #cfcfcf;
-  border-radius: 100px;
+button {
+  border-radius: 6px !important;
+  font-weight: 500 !important;
 }
-::-webkit-scrollbar-thumb:hover { background: #b0b0b0; }
+
+div[data-testid="stButton"] > button {
+  border: 1px solid #ddd !important;
+  background: #fafafa !important;
+  padding: 8px 12px !important;
+}
+
+div[data-testid="stButton"] > button:hover {
+  background: #f1f1f1 !important;
+  border-color: #ccc !important;
+}
+
+/* -----------------------------------------------------------
+   CHAT BUBBLE FIX
+----------------------------------------------------------- */
+.message-user {
+  background: #e8eef8 !important;
+  border-radius: 14px !important;
+  padding: 12px 15px !important;
+  max-width: 75%;
+  float: right;
+  clear: both;
+}
+
+.message-assistant {
+  background: #ffffff !important;
+  border-radius: 14px !important;
+  padding: 12px 15px !important;
+  border: 1px solid #ececec !important;
+  max-width: 75%;
+  float: left;
+  clear: both;
+}
