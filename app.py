@@ -318,32 +318,25 @@ with tabs[1]:
             role_val = lead.get("primary_role") or "—"
             city_val = lead.get("city") or ""
             country_val = lead.get("country") or ""
-            
-              # -----------------------------
-            # DYNAMIC SPACING FOR LABEL
-            # -----------------------------
-            # Fixed-width text columns using a monospace label
-            raw_label = f"{name:<30}Tier: {tier:<10}{email_val}"
-            
-            label = f"<span class='expander-label-mono'>{raw_label}</span>"
-            
-            with st.expander(label, expanded=False):
-                st.markdown("", unsafe_allow_html=True)
 
+            # CLICKABLE ROW
+            with st.expander(
+                f"{name} | Tier {tier} | {email_val}",
+                expanded=False
+            ):
 
                 # -----------------------------
                 # DETAILS SECTION
                 # -----------------------------
                 st.markdown(f"### {name}")
-        
+
                 if city_val or country_val:
                     st.caption(f"{city_val}, {country_val}".strip(", "))
-        
+
                 st.caption(f"{role_val} | Tier {tier}")
                 st.write(email_val)
-        
+
                 st.markdown("---")
-                # ... rest of your actions etc ...
 
                 # -----------------------------
                 # ACTION BUTTONS
