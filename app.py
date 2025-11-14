@@ -579,6 +579,16 @@ with tabs[3]:
     # --- Initialize OpenAI client ---
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+    # ✅ ADD THIS BLOCK TO LOAD CHAT SESSIONS FROM SUPABASE
+    if "chat_sessions" not in st.session_state:
+        st.session_state.chat_sessions = (
+            supabase.table("chat_sessions")
+            .select("*")
+            .order("updated_at", desc=True)
+            .execute()
+            .data
+        )
+
     # --- Layout (match width with Search tab) ---
     chat_container_full = st.container()
     with chat_container_full:
@@ -605,8 +615,29 @@ with tabs[3]:
                 # Show only the chat title (summary) — no timestamp
                 label = f"{summary}"
                 if st.button(label, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
-                    st.session_state.active_chat = session["history"].copy()
+
+                    # Set current session ID
+                    session_id = session["id"]
+                    st.session_state.current_session_id = session_id
+                
+                    # Fetch messages for this session
+                    msgs = (
+                        supabase.table("chat_messages")
+                        .select("*")
+                        .eq("session_id", session_id)
+                        .order("created_at", asc=True)
+                        .execute()
+                        .data
+                    )
+                
+                    # Convert DB rows → your chat format
+                    st.session_state.active_chat = [
+                        {"role": m["role"], "content": m["content"]} 
+                        for m in msgs
+                    ]
+                
                     st.rerun()
+
 
     # --- RIGHT COLUMN: Active Chat ---
     with right:
