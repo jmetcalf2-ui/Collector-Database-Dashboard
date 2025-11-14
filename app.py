@@ -163,176 +163,182 @@ with tabs[0]:
     results = []
     error_info = None
 
-    # ==================================================================
-    # === SEARCH LOGIC (SEMANTIC OR REGULAR)
-    # ==================================================================
-    if st.button("Search Leads") and supabase:
-        with st.spinner("Searching..."):
+   # ==================================================================
+# === SEARCH LOGIC (SEMANTIC OR REGULAR)
+# ==================================================================
+if st.button("Search Leads") and supabase:
+    with st.spinner("Searching..."):
 
-            # ---- SEMANTIC SEARCH ----
-            if semantic_query.strip():
-                try:
-                    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                    emb = client.embeddings.create(
-                        model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-large"),
-                        input=semantic_query,
-                    ).data[0].embedding
+        # ---- SEMANTIC SEARCH ----
+        if semantic_query.strip():
+            try:
+                client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                emb = client.embeddings.create(
+                    model=os.getenv("EMBEDDING_MODEL", "text-embedding-3-large"),
+                    input=semantic_query,
+                ).data[0].embedding
 
-                    rpc = supabase.rpc(
-                        "rpc_semantic_search_leads_supplements",
-                        {
-                            "query_embedding": list(map(float, emb)),
-                            "match_count": 50,
-                            "min_score": 0.10,
-                        },
-                    ).execute()
+                rpc = supabase.rpc(
+                    "rpc_semantic_search_leads_supplements",
+                    {
+                        "query_embedding": list(map(float, emb)),
+                        "match_count": 50,
+                        "min_score": 0.10,
+                    },
+                ).execute()
 
-                    normalized = []
-                    for row in rpc.data or []:
-                        normalized.append({
-                            "lead_id": row.get("lead_id") or row.get("id"),
-                            "full_name": row.get("full_name"),
-                            "email": row.get("email"),
-                            "tier": row.get("tier"),
-                            "primary_role": row.get("primary_role"),
-                            "city": row.get("city"),
-                            "country": row.get("country"),
-                            "notes": row.get("notes"),
-                        })
+                normalized = []
+                for row in rpc.data or []:
+                    normalized.append({
+                        "lead_id": row.get("lead_id") or row.get("id"),
+                        "full_name": row.get("full_name"),
+                        "email": row.get("email"),
+                        "tier": row.get("tier"),
+                        "primary_role": row.get("primary_role"),
+                        "city": row.get("city"),
+                        "country": row.get("country"),
+                        "notes": row.get("notes"),
+                    })
 
-                    results = normalized
-                    st.caption("Showing semantic matches")
+                results = normalized
+                st.caption("Showing semantic matches")
 
-                except Exception as e:
-                    st.error("Semantic search failed.")
-                    st.code(str(e))
+            except Exception as e:
+                st.error("Semantic search failed.")
+                st.code(str(e))
 
-            # ---- REGULAR SEARCH ----
-            else:
-                try:
-                    query = supabase.table("leads").select(
-                        "lead_id, full_name, email, tier, primary_role, city, country, notes"
+        # ---- REGULAR SEARCH ----
+        else:
+            try:
+                query = supabase.table("leads").select(
+                    "lead_id, full_name, email, tier, primary_role, city, country, notes"
+                )
+
+                if keyword:
+                    q = f"%{keyword}%"
+                    query = query.or_(
+                        f"full_name.ilike.{q},email.ilike.{q},primary_role.ilike.{q}"
                     )
 
-                    if keyword:
-                        q = f"%{keyword}%"
-                        query = query.or_(
-                            f"full_name.ilike.{q},email.ilike.{q},primary_role.ilike.{q}"
-                        )
+                if city:
+                    query = query.ilike("city", f"%{city}%")
+                if country:
+                    query = query.ilike("country", f"%{country}%")
+                if tier:
+                    query = query.eq("tier", tier)
+                if role:
+                    query = query.ilike("primary_role", f"%{role}%")
 
-                    if city:
-                        query = query.ilike("city", f"%{city}%")
-                    if country:
-                        query = query.ilike("country", f"%{country}%")
-                    if tier:
-                        query = query.eq("tier", tier)
-                    if role:
-                        query = query.ilike("primary_role", f"%{role}%")
+                results = query.limit(200).execute().data or []
 
-                    results = query.limit(200).execute().data or []
+            except Exception as e:
+                st.error("Search failed.")
+                st.code(str(e))
 
-                except Exception as e:
-                    st.error("Search failed.")
-                    st.code(str(e))
+    # 🔥🔥🔥 ADD DEBUGGING HERE
+    st.write("DEBUG RAW RESULTS →", results)
 
-    # ======================================================================
-    # === RESULTS DISPLAY — CONTACTS-STYLE GRID (REUSED FROM CONTACTS TAB)
-    # ======================================================================
-    if results:
-        st.success(f"Found {len(results)} results")
 
-        cols = st.columns(2)
+# ======================================================================
+# === RESULTS DISPLAY — CONTACTS-STYLE GRID (REUSED FROM CONTACTS TAB)
+# ======================================================================
+if results:
+    st.success(f"Found {len(results)} results")
 
-        for i, lead in enumerate(results):
-            col = cols[i % 2]
+    cols = st.columns(2)
 
-            with col:
-                name = lead.get("full_name", "Unnamed")
-                tier_val = lead.get("tier", "—")
-                role = lead.get("primary_role", "—")
-                email_val = lead.get("email", "—")
-                city_val = (lead.get("city") or "").strip()
-                country_val = (lead.get("country") or "").strip()
+    for i, lead in enumerate(results):
+        col = cols[i % 2]
 
-                lead_key = str(lead.get("lead_id") or lead.get("id"))
-                summary_key = f"summary_{lead_key}"
+        with col:
+            name = lead.get("full_name", "Unnamed")
+            tier_val = lead.get("tier", "—")
+            role = lead.get("primary_role", "—")
+            email_val = lead.get("email", "—")
+            city_val = (lead.get("city") or "").strip()
+            country_val = (lead.get("country") or "").strip()
 
-                expander_label = name
+            lead_key = str(lead.get("lead_id") or lead.get("id"))
+            summary_key = f"summary_{lead_key}"
 
-                with st.expander(expander_label):
-                    st.markdown(f"**{name}**")
+            expander_label = name
 
-                    if city_val or country_val:
-                        st.caption(f"{city_val}, {country_val}".strip(", "))
+            with st.expander(expander_label):
+                st.markdown(f"**{name}**")
 
-                    st.caption(f"{role} | Tier {tier_val}")
-                    st.write(email_val)
+                if city_val or country_val:
+                    st.caption(f"{city_val}, {country_val}".strip(", "))
 
-                    sum_col, del_col = st.columns([3, 1])
+                st.caption(f"{role} | Tier {tier_val}")
+                st.write(email_val)
 
-                    # SUMMARY BUTTON
-                    with sum_col:
-                        if summary_key not in st.session_state:
-                            if st.button(f"Summarize {name}", key=f"sum_{lead_key}"):
-                                with st.spinner("Summarizing notes..."):
-                                    try:
-                                        supplements = (
-                                            supabase.table("leads_supplements")
-                                            .select("notes")
-                                            .eq("lead_id", lead_key)
-                                            .execute()
-                                            .data or []
-                                        )
+                sum_col, del_col = st.columns([3, 1])
 
-                                        base_notes = lead.get("notes") or ""
-                                        supplement_notes = "\n\n".join(
-                                            (s.get("notes") or "").strip()
-                                            for s in supplements
-                                            if isinstance(s, dict)
-                                        )
-
-                                        combined_notes = (
-                                            base_notes
-                                            + ("\n\n" if base_notes and supplement_notes else "")
-                                            + supplement_notes
-                                        ).strip()
-
-                                        summary = summarize_collector(lead_key, combined_notes)
-                                        st.session_state[summary_key] = summary
-                                        st.rerun()
-
-                                    except Exception as e:
-                                        st.error(f"Summarization failed: {e}")
-
-                        else:
-                            st.markdown("**Notes:**")
-                            st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
-
-                    # DELETE BUTTON
-                    with del_col:
-                        if st.button("Delete", key=f"del_{lead_key}"):
-                            st.session_state[f"confirm_delete_{lead_key}"] = True
-
-                        if st.session_state.get(f"confirm_delete_{lead_key}", False):
-                            st.warning(f"Are you sure you want to delete {name}?")
-                            confirm = st.button("Yes, delete", key=f"confirm_del_{lead_key}")
-                            cancel = st.button("Cancel", key=f"cancel_del_{lead_key}")
-
-                            if confirm:
+                # SUMMARY BUTTON
+                with sum_col:
+                    if summary_key not in st.session_state:
+                        if st.button(f"Summarize {name}", key=f"sum_{lead_key}"):
+                            with st.spinner("Summarizing notes..."):
                                 try:
-                                    supabase.table("leads").delete().eq("lead_id", lead_key).execute()
-                                    st.success(f"{name} has been deleted.")
-                                    st.session_state[f"confirm_delete_{lead_key}"] = False
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error deleting contact: {e}")
+                                    supplements = (
+                                        supabase.table("leads_supplements")
+                                        .select("notes")
+                                        .eq("lead_id", lead_key)
+                                        .execute()
+                                        .data or []
+                                    )
 
-                            if cancel:
+                                    base_notes = lead.get("notes") or ""
+                                    supplement_notes = "\n\n".join(
+                                        (s.get("notes") or "").strip()
+                                        for s in supplements
+                                        if isinstance(s, dict)
+                                    )
+
+                                    combined_notes = (
+                                        base_notes
+                                        + ("\n\n" if base_notes and supplement_notes else "")
+                                        + supplement_notes
+                                    ).strip()
+
+                                    summary = summarize_collector(lead_key, combined_notes)
+                                    st.session_state[summary_key] = summary
+                                    st.rerun()
+
+                                except Exception as e:
+                                    st.error("Summarization failed.")
+                                    st.code(str(e))
+
+                    else:
+                        st.markdown("**Notes:**")
+                        st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+
+                # DELETE BUTTON
+                with del_col:
+                    if st.button("Delete", key=f"del_{lead_key}"):
+                        st.session_state[f"confirm_delete_{lead_key}"] = True
+
+                    if st.session_state.get(f"confirm_delete_{lead_key}", False):
+                        st.warning(f"Are you sure you want to delete {name}?")
+                        confirm = st.button("Yes, delete", key=f"confirm_del_{lead_key}")
+                        cancel = st.button("Cancel", key=f"cancel_del_{lead_key}")
+
+                        if confirm:
+                            try:
+                                supabase.table("leads").delete().eq("lead_id", lead_key).execute()
+                                st.success(f"{name} has been deleted.")
                                 st.session_state[f"confirm_delete_{lead_key}"] = False
                                 st.rerun()
+                            except Exception as e:
+                                st.error("Error deleting contact.")
+                                st.code(str(e))
 
-    else:
-        st.info("No leads found.")
+                        if cancel:
+                            st.session_state[f"confirm_delete_{lead_key}"] = False
+                            st.rerun()
+
+else:
+    st.info("No leads found.")
 
 # ======================================================================
 # === CONTACTS TAB ===
