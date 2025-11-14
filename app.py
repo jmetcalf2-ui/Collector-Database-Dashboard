@@ -305,6 +305,70 @@ with tabs[0]:
                     st.caption(f"{role_val} | Tier {tier_val}")
                     st.write(email_val)
 
+                    # ---------------------------------------------------------
+                    #   INSERT SUMMARIZE BUTTON HERE (THIS GOES RIGHT AFTER)
+                    # ---------------------------------------------------------
+                    sum_col, del_col = st.columns([3, 1])
+                
+                    with sum_col:
+                        summary_key = f"summary_{lead_id}"
+                
+                        if summary_key not in st.session_state:
+                            if st.button(f"Summarize {name}", key=f"sum_{lead_id}"):
+                                with st.spinner("Summarizing notes..."):
+                                    try:
+                                        supplements = (
+                                            supabase.table("leads_supplements")
+                                            .select("notes")
+                                            .eq("lead_id", lead_id)
+                                            .execute()
+                                            .data or []
+                                        )
+                
+                                        base_notes = lead.get("notes") or ""
+                                        supplement_notes = "\n\n".join(
+                                            (s.get("notes") or "").strip()
+                                            for s in supplements
+                                        )
+                
+                                        combined_notes = (
+                                            base_notes +
+                                            ("\n\n" if base_notes and supplement_notes else "") +
+                                            supplement_notes
+                                        ).strip()
+                
+                                        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                                        prompt = f"""
+                Summarize the following collector notes into 5–7 factual bullet points.
+                Avoid adjectives. Focus on artists collected, museum affiliations, geography,
+                philanthropy, collecting tendencies, and notable acquisitions.
+                
+                NOTES:
+                {combined_notes}
+                """
+                
+                                        completion = client.chat.completions.create(
+                                            model="gpt-4o-mini",
+                                            messages=[
+                                                {"role": "system", "content": "You summarize art collectors factually."},
+                                                {"role": "user", "content": prompt},
+                                            ],
+                                            temperature=0.2,
+                                            max_tokens=500,
+                                        )
+                                        summary_text = completion.choices[0].message.content.strip()
+                
+                                        st.session_state[summary_key] = summary_text
+                                        st.rerun()
+                
+                                    except Exception as e:
+                                        st.error(f"Summarization failed: {e}")
+                
+                        else:
+                            st.markdown("**Summary:**")
+                            st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+
+
         # ---- Pagination ----
         prev_col, next_col = st.columns([1,1])
         with prev_col:
