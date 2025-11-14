@@ -580,14 +580,15 @@ with tabs[3]:
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     # --- Initialize session state ----
-    if "chat_sessions" not in st.session_state:
-        st.session_state.chat_sessions = (
-            supabase.table("chat_sessions")
-            .select("*")
-            .order("updated_at", desc=True)
-            .execute()
-            .data
-        )
+    # Always fetch chat sessions on page load
+    st.session_state.chat_sessions = (
+        supabase.table("chat_sessions")
+        .select("*")
+        .order("updated_at", desc=True)
+        .execute()
+        .data
+    )
+
 
     if "active_chat" not in st.session_state:
         st.session_state.active_chat = []
