@@ -128,7 +128,7 @@ def summarize_collector(lead_id: str, combined_notes: str) -> str:
         return f"⚠️ OpenAI error: {e}"
 
 # ======================================================================
-# === SEARCH TAB (FINAL — ALL FEATURES + 2-COLUMN PROFILE GRID) ===
+# === SEARCH TAB (FINAL — CONTACTS GRID + SEARCH LOGIC) ===
 # ======================================================================
 with tabs[0]:
     st.markdown("## Search")
@@ -169,7 +169,7 @@ with tabs[0]:
     if st.button("Search Leads") and supabase:
         with st.spinner("Searching..."):
 
-            # ---- SEMANTIC SEARCH FIRST ----
+            # ---- SEMANTIC SEARCH ----
             if semantic_query.strip():
                 try:
                     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -187,7 +187,6 @@ with tabs[0]:
                         },
                     ).execute()
 
-                    # Normalize semantic results into consistent lead objects
                     normalized = []
                     for row in rpc.data or []:
                         normalized.append({
@@ -236,56 +235,51 @@ with tabs[0]:
                     st.error("Search failed.")
                     st.code(str(e))
 
-    # ==================================================================
-    # === RESULTS DISPLAY — 2-COLUMN GRID WITH EXPANDERS (FINAL)
-    # ==================================================================
+    # ======================================================================
+    # === RESULTS DISPLAY — CONTACTS-STYLE GRID (REUSED FROM CONTACTS TAB)
+    # ======================================================================
     if results:
         st.success(f"Found {len(results)} results")
 
-        left_col, right_col = st.columns(2)
+        cols = st.columns(2)
 
         for i, lead in enumerate(results):
-            col = left_col if i % 2 == 0 else right_col
+            col = cols[i % 2]
 
             with col:
                 name = lead.get("full_name", "Unnamed")
-                email_val = lead.get("email", "—")
                 tier_val = lead.get("tier", "—")
-                role_val = lead.get("primary_role", "—")
+                role = lead.get("primary_role", "—")
+                email_val = lead.get("email", "—")
                 city_val = (lead.get("city") or "").strip()
                 country_val = (lead.get("country") or "").strip()
 
-                lead_id = str(lead.get("lead_id"))
-                summary_key = f"summary_{lead_id}"
+                lead_key = str(lead.get("lead_id") or lead.get("id"))
+                summary_key = f"summary_{lead_key}"
 
-                exp_label = f"{name} — {city_val}" if city_val else name
+                expander_label = name
 
-                with st.expander(exp_label):
+                with st.expander(expander_label):
                     st.markdown(f"**{name}**")
 
-                    # Location
                     if city_val or country_val:
                         st.caption(f"{city_val}, {country_val}".strip(", "))
 
-                    # Role + Tier
-                    st.caption(f"{role_val} | Tier {tier_val}")
-
-                    # Email
+                    st.caption(f"{role} | Tier {tier_val}")
                     st.write(email_val)
 
-                    # --- SUMMARIZE + DELETE ROW ---
                     sum_col, del_col = st.columns([3, 1])
 
-                    # SUMMARIZE
+                    # SUMMARY BUTTON
                     with sum_col:
                         if summary_key not in st.session_state:
-                            if st.button(f"Summarize {name}", key=f"sum_{lead_id}"):
+                            if st.button(f"Summarize {name}", key=f"sum_{lead_key}"):
                                 with st.spinner("Summarizing notes..."):
                                     try:
                                         supplements = (
                                             supabase.table("leads_supplements")
                                             .select("notes")
-                                            .eq("lead_id", lead_id)
+                                            .eq("lead_id", lead_key)
                                             .execute()
                                             .data or []
                                         )
@@ -294,54 +288,47 @@ with tabs[0]:
                                         supplement_notes = "\n\n".join(
                                             (s.get("notes") or "").strip()
                                             for s in supplements
+                                            if isinstance(s, dict)
                                         )
 
                                         combined_notes = (
-                                            base_notes +
-                                            ("\n\n" if base_notes and supplement_notes else "") +
-                                            supplement_notes
+                                            base_notes
+                                            + ("\n\n" if base_notes and supplement_notes else "")
+                                            + supplement_notes
                                         ).strip()
 
-                                        summary = summarize_collector(lead_id, combined_notes)
+                                        summary = summarize_collector(lead_key, combined_notes)
                                         st.session_state[summary_key] = summary
                                         st.rerun()
 
                                     except Exception as e:
-                                        st.error("Summarization failed.")
-                                        st.code(str(e))
+                                        st.error(f"Summarization failed: {e}")
+
                         else:
                             st.markdown("**Notes:**")
                             st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
 
-                    # DELETE
+                    # DELETE BUTTON
                     with del_col:
-                        if st.button("Delete", key=f"del_{lead_id}"):
-                            st.session_state[f"confirm_delete_{lead_id}"] = True
+                        if st.button("Delete", key=f"del_{lead_key}"):
+                            st.session_state[f"confirm_delete_{lead_key}"] = True
 
-                        if st.session_state.get(f"confirm_delete_{lead_id}", False):
-                            st.warning(f"Delete {name}?")
-                            confirm = st.button(
-                                "Yes, delete", key=f"confirm_del_{lead_id}"
-                            )
-                            cancel = st.button(
-                                "Cancel", key=f"cancel_del_{lead_id}"
-                            )
+                        if st.session_state.get(f"confirm_delete_{lead_key}", False):
+                            st.warning(f"Are you sure you want to delete {name}?")
+                            confirm = st.button("Yes, delete", key=f"confirm_del_{lead_key}")
+                            cancel = st.button("Cancel", key=f"cancel_del_{lead_key}")
 
                             if confirm:
                                 try:
-                                    supabase.table("leads").delete().eq(
-                                        "lead_id", lead_id
-                                    ).execute()
-                                    st.success(f"{name} deleted.")
-                                    st.session_state[f"confirm_delete_{lead_id}"] = False
+                                    supabase.table("leads").delete().eq("lead_id", lead_key).execute()
+                                    st.success(f"{name} has been deleted.")
+                                    st.session_state[f"confirm_delete_{lead_key}"] = False
                                     st.rerun()
-
                                 except Exception as e:
-                                    st.error("Delete failed.")
-                                    st.code(str(e))
+                                    st.error(f"Error deleting contact: {e}")
 
                             if cancel:
-                                st.session_state[f"confirm_delete_{lead_id}"] = False
+                                st.session_state[f"confirm_delete_{lead_key}"] = False
                                 st.rerun()
 
     else:
