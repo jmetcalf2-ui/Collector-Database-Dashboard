@@ -128,7 +128,7 @@ def summarize_collector(lead_id: str, combined_notes: str) -> str:
         return f"⚠️ OpenAI error: {e}"
 
 # ======================================================================
-# === SEARCH TAB ===
+# === SEARCH TAB (FINAL — ALL FEATURES + 2-COLUMN PROFILE GRID) ===
 # ======================================================================
 with tabs[0]:
     st.markdown("## Search")
@@ -155,19 +155,22 @@ with tabs[0]:
     with col5:
         role = st.text_input("Primary Role")
 
-    # --- Semantic Search Field ---
     semantic_query = st.text_input(
         "Semantic Search",
         placeholder="e.g. Minimalism collectors or those following Bruce Nauman",
     )
 
     results = []
+    error_info = None
 
-    # --- Button ---
+    # ==================================================================
+    # === SEARCH LOGIC (SEMANTIC OR REGULAR)
+    # ==================================================================
     if st.button("Search Leads") and supabase:
         with st.spinner("Searching..."):
+
+            # ---- SEMANTIC SEARCH FIRST ----
             if semantic_query.strip():
-                # --- Semantic search via RPC ---
                 try:
                     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
                     emb = client.embeddings.create(
@@ -175,25 +178,49 @@ with tabs[0]:
                         input=semantic_query,
                     ).data[0].embedding
 
-                    res = supabase.rpc(
+                    rpc = supabase.rpc(
                         "rpc_semantic_search_leads_supplements",
                         {
                             "query_embedding": list(map(float, emb)),
-                            "match_count": 25,
-                            "min_score": 0.15,
+                            "match_count": 50,
+                            "min_score": 0.10,
                         },
                     ).execute()
 
-                    results = res.data or []
+                    # Normalize semantic results into consistent lead objects
+                    normalized = []
+                    for row in rpc.data or []:
+                        normalized.append({
+                            "lead_id": row.get("lead_id") or row.get("id"),
+                            "full_name": row.get("full_name"),
+                            "email": row.get("email"),
+                            "tier": row.get("tier"),
+                            "primary_role": row.get("primary_role"),
+                            "city": row.get("city"),
+                            "country": row.get("country"),
+                            "notes": row.get("notes"),
+                        })
+
+                    results = normalized
                     st.caption("Showing semantic matches")
+
                 except Exception as e:
-                    st.error(f"Semantic search failed: {e}")
+                    st.error("Semantic search failed.")
+                    st.code(str(e))
+
+            # ---- REGULAR SEARCH ----
             else:
-                # --- Fallback to regular search on leads table ---
                 try:
-                    query = supabase.table("leads").select("*")
+                    query = supabase.table("leads").select(
+                        "lead_id, full_name, email, tier, primary_role, city, country, notes"
+                    )
+
                     if keyword:
-                        query = query.ilike("full_name", f"%{keyword}%")
+                        q = f"%{keyword}%"
+                        query = query.or_(
+                            f"full_name.ilike.{q},email.ilike.{q},primary_role.ilike.{q}"
+                        )
+
                     if city:
                         query = query.ilike("city", f"%{city}%")
                     if country:
@@ -202,154 +229,63 @@ with tabs[0]:
                         query = query.eq("tier", tier)
                     if role:
                         query = query.ilike("primary_role", f"%{role}%")
-                    results = query.limit(100).execute().data or []
+
+                    results = query.limit(200).execute().data or []
+
                 except Exception as e:
-                    st.error(f"Search failed: {e}")
-                    results = []
+                    st.error("Search failed.")
+                    st.code(str(e))
 
-    # --- Display results as DROPDOWN PROFILES (moved from Contacts) ---
+    # ==================================================================
+    # === RESULTS DISPLAY — 2-COLUMN GRID WITH EXPANDERS (FINAL)
+    # ==================================================================
     if results:
         st.success(f"Found {len(results)} results")
 
-        for lead in results:
-            name = lead.get("full_name", "Unnamed")
-            tier_val = lead.get("tier", "—")
-            role_val = lead.get("primary_role", "—")
-            email_val = lead.get("email", "—")
-            city_val = (lead.get("city") or "").strip()
-            country_val = (lead.get("country") or "").strip()
-
-            # Handle both semantic RPC and direct leads table cases
-            lead_key = str(lead.get("lead_id") or lead.get("id") or "")
-            summary_key = f"summary_{lead_key}" if lead_key else None
-
-            # Expander label: name + optional city
-            if city_val:
-                exp_label = f"{name} — {city_val}"
-            else:
-                exp_label = name
-
-            with st.expander(exp_label, expanded=False):
-                st.markdown(f"**{name}**")
-
-                if city_val or country_val:
-                    st.caption(f"{city_val}, {country_val}".strip(", "))
-
-                st.caption(f"{role_val if role_val else '—'} | Tier {tier_val if tier_val else '—'}")
-                st.write(email_val)
-
-                # --- Summarize + Delete row ---
-                sum_col, del_col = st.columns([3, 1])
-
-                # Summarize
-                with sum_col:
-                    if lead_key and summary_key:
-                        if summary_key not in st.session_state:
-                            if st.button(f"Summarize {name}", key=f"sum_{lead_key}"):
-                                with st.spinner("Summarizing notes..."):
-                                    try:
-                                        supplements = (
-                                            supabase.table("leads_supplements")
-                                            .select("notes")
-                                            .eq("lead_id", lead_key)
-                                            .execute()
-                                            .data
-                                            or []
-                                        )
-
-                                        base_notes = lead.get("notes") or ""
-                                        supplement_notes = "\n\n".join(
-                                            (s.get("notes") or "").strip()
-                                            for s in supplements
-                                            if isinstance(s, dict)
-                                        )
-                                        combined_notes = (
-                                            base_notes
-                                            + ("\n\n" if base_notes and supplement_notes else "")
-                                            + supplement_notes
-                                        ).strip()
-
-                                        summary = summarize_collector(lead_key, combined_notes)
-                                        st.session_state[summary_key] = summary
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"Summarization failed: {e}")
-                        else:
-                            st.markdown("**Notes:**")
-                            st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
-                    else:
-                        st.caption("No ID available to summarize notes.")
-
-                # Delete
-                with del_col:
-                    if lead_key:
-                        if st.button("Delete", key=f"del_{lead_key}"):
-                            st.session_state[f"confirm_delete_{lead_key}"] = True
-
-                        if st.session_state.get(f"confirm_delete_{lead_key}", False):
-                            st.warning(f"Are you sure you want to delete {name}?")
-                            confirm = st.button("Yes, delete", key=f"confirm_del_{lead_key}")
-                            cancel = st.button("Cancel", key=f"cancel_del_{lead_key}")
-
-                            if confirm:
-                                try:
-                                    supabase.table("leads").delete().eq("lead_id", lead_key).execute()
-                                    st.success(f"{name} has been deleted.")
-                                    st.session_state[f"confirm_delete_{lead_key}"] = False
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error deleting contact: {e}")
-
-                            if cancel:
-                                st.session_state[f"confirm_delete_{lead_key}"] = False
-                                st.rerun()
-
-# ------------------------------------------------------------------
-    # RESULTS GRID (2-COLUMN LAYOUT LIKE CONTACTS TAB)
-    # ------------------------------------------------------------------
-    if results:
-        st.success(f"Found {len(results)} results")
-
-        cols = st.columns(2)
+        left_col, right_col = st.columns(2)
 
         for i, lead in enumerate(results):
-            col = cols[i % 2]  # Alternate between left and right column
+            col = left_col if i % 2 == 0 else right_col
 
             with col:
                 name = lead.get("full_name", "Unnamed")
+                email_val = lead.get("email", "—")
                 tier_val = lead.get("tier", "—")
                 role_val = lead.get("primary_role", "—")
-                email_val = lead.get("email", "—")
                 city_val = (lead.get("city") or "").strip()
                 country_val = (lead.get("country") or "").strip()
 
-                lead_key = str(lead.get("lead_id"))
-                summary_key = f"summary_{lead_key}"
+                lead_id = str(lead.get("lead_id"))
+                summary_key = f"summary_{lead_id}"
 
                 exp_label = f"{name} — {city_val}" if city_val else name
 
                 with st.expander(exp_label):
                     st.markdown(f"**{name}**")
 
+                    # Location
                     if city_val or country_val:
                         st.caption(f"{city_val}, {country_val}".strip(", "))
 
-                    st.caption(f"{role_val if role_val else '—'} | Tier {tier_val if tier_val else '—'}")
+                    # Role + Tier
+                    st.caption(f"{role_val} | Tier {tier_val}")
+
+                    # Email
                     st.write(email_val)
 
-                    # Buttons
+                    # --- SUMMARIZE + DELETE ROW ---
                     sum_col, del_col = st.columns([3, 1])
 
-                    # SUMMARY BUTTON
+                    # SUMMARIZE
                     with sum_col:
                         if summary_key not in st.session_state:
-                            if st.button(f"Summarize {name}", key=f"sum_{lead_key}"):
+                            if st.button(f"Summarize {name}", key=f"sum_{lead_id}"):
                                 with st.spinner("Summarizing notes..."):
                                     try:
                                         supplements = (
                                             supabase.table("leads_supplements")
                                             .select("notes")
-                                            .eq("lead_id", lead_key)
+                                            .eq("lead_id", lead_id)
                                             .execute()
                                             .data or []
                                         )
@@ -361,12 +297,12 @@ with tabs[0]:
                                         )
 
                                         combined_notes = (
-                                            base_notes
-                                            + ("\n\n" if base_notes and supplement_notes else "")
-                                            + supplement_notes
+                                            base_notes +
+                                            ("\n\n" if base_notes and supplement_notes else "") +
+                                            supplement_notes
                                         ).strip()
 
-                                        summary = summarize_collector(lead_key, combined_notes)
+                                        summary = summarize_collector(lead_id, combined_notes)
                                         st.session_state[summary_key] = summary
                                         st.rerun()
 
@@ -377,30 +313,37 @@ with tabs[0]:
                             st.markdown("**Notes:**")
                             st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
 
-                    # DELETE BUTTON
+                    # DELETE
                     with del_col:
-                        if st.button("Delete", key=f"del_{lead_key}"):
-                            st.session_state[f"confirm_delete_{lead_key}"] = True
+                        if st.button("Delete", key=f"del_{lead_id}"):
+                            st.session_state[f"confirm_delete_{lead_id}"] = True
 
-                        if st.session_state.get(f"confirm_delete_{lead_key}", False):
-                            st.warning(f"Are you sure you want to delete {name}?")
-                            confirm = st.button("Yes, delete", key=f"confirm_del_{lead_key}")
-                            cancel = st.button("Cancel", key=f"cancel_del_{lead_key}")
+                        if st.session_state.get(f"confirm_delete_{lead_id}", False):
+                            st.warning(f"Delete {name}?")
+                            confirm = st.button(
+                                "Yes, delete", key=f"confirm_del_{lead_id}"
+                            )
+                            cancel = st.button(
+                                "Cancel", key=f"cancel_del_{lead_id}"
+                            )
 
                             if confirm:
                                 try:
-                                    supabase.table("leads").delete().eq("lead_id", lead_key).execute()
-                                    st.success(f"{name} has been deleted.")
-                                    st.session_state[f"confirm_delete_{lead_key}"] = False
+                                    supabase.table("leads").delete().eq(
+                                        "lead_id", lead_id
+                                    ).execute()
+                                    st.success(f"{name} deleted.")
+                                    st.session_state[f"confirm_delete_{lead_id}"] = False
                                     st.rerun()
+
                                 except Exception as e:
-                                    st.error("Error deleting contact.")
+                                    st.error("Delete failed.")
                                     st.code(str(e))
 
                             if cancel:
-                                st.session_state[f"confirm_delete_{lead_key}"] = False
+                                st.session_state[f"confirm_delete_{lead_id}"] = False
                                 st.rerun()
-    
+
     else:
         st.info("No leads found.")
 
