@@ -560,6 +560,7 @@ with tabs[2]:
                 with st.expander(f"{s['name']}"):
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
+# ======================================================================
 # === CHAT TAB =========================================================
 # ======================================================================
 with tabs[3]:
@@ -575,15 +576,14 @@ with tabs[3]:
             "Keep responses factual, concise, and well-reasoned."
         )
 
-    # --- Initialize OpenAI client ---
+    # --- OpenAI client ---
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # --- Initialize session state ----
-    # Always fetch chat sessions on page load
+    # --- Session state initialization ---
     st.session_state.chat_sessions = (
         supabase.table("chat_sessions")
         .select("*")
-        .order("updated_at", desc=True)
+        .order("id", desc=True)
         .execute()
         .data
     )
@@ -594,7 +594,7 @@ with tabs[3]:
     if "current_session_id" not in st.session_state:
         st.session_state.current_session_id = None
 
-    # --- Layout (match width with Search tab) ---
+    # --- Layout ---
     chat_container_full = st.container()
     with chat_container_full:
         st.markdown(
@@ -609,8 +609,9 @@ with tabs[3]:
         )
         left, right = st.columns([2.4, 6.6], gap="large")
 
+
     # ======================================================================
-    # === LEFT COLUMN: CHAT HISTORY ========================================
+    # === LEFT COLUMN: SAVED CHATS =========================================
     # ======================================================================
     with left:
         st.markdown("### Chats")
@@ -623,19 +624,17 @@ with tabs[3]:
                 title = session.get("title", "Untitled chat")
                 summary = session.get("summary", "")
 
-                # Card-style display with bullet summary
-                label = f"**{title}**\n\n{summary}"
-
-                if st.button(label, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
-
+                # --- Chat title button ---
+                if st.button(title, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
                     session_id = session["id"]
                     st.session_state.current_session_id = session_id
 
+                    # Load messages for session
                     msgs = (
                         supabase.table("chat_messages")
                         .select("*")
                         .eq("session_id", session_id)
-                        .order("created_at", asc=True)
+                        .order("id", asc=True)
                         .execute()
                         .data
                     )
@@ -646,6 +645,12 @@ with tabs[3]:
                     ]
 
                     st.rerun()
+
+                # --- Collapsible bullet-point summary ---
+                if summary:
+                    with st.expander("Summary", expanded=False):
+                        st.markdown(summary)
+
 
     # ======================================================================
     # === RIGHT COLUMN: ACTIVE CHAT WINDOW =================================
@@ -673,7 +678,7 @@ with tabs[3]:
                         {msg["content"]}
                     </div>
                     """,
-                    unsafe_allow_html=True
+                    unsafe_allow_html=True,
                 )
             else:
                 st.markdown(
@@ -693,22 +698,20 @@ with tabs[3]:
                         {msg["content"]}
                     </div>
                     """,
-                    unsafe_allow_html=True
+                    unsafe_allow_html=True,
                 )
 
         st.markdown("<div style='clear:both;'></div>", unsafe_allow_html=True)
 
-        # ==================================================================
-        # === USER INPUT ===================================================
-        # ==================================================================
+        # --- Chat Input ---
         user_input = st.chat_input("Ask about collectors, regions, or interests...")
 
         if user_input:
 
-            # Add to UI
+            # Add locally
             st.session_state.active_chat.append({"role": "user", "content": user_input})
 
-            # Save user msg to Supabase (if inside a session)
+            # Save message to Supabase
             if st.session_state.current_session_id:
                 supabase.table("chat_messages").insert({
                     "session_id": st.session_state.current_session_id,
@@ -716,6 +719,7 @@ with tabs[3]:
                     "content": user_input,
                 }).execute()
 
+            # AI response
             with st.spinner("Thinking..."):
                 try:
                     messages = [{"role": "system", "content": system_prompt}]
@@ -729,11 +733,9 @@ with tabs[3]:
                     )
 
                     response_text = completion.choices[0].message.content.strip()
-
-                    # Add assistant message to UI
                     st.session_state.active_chat.append({"role": "assistant", "content": response_text})
 
-                    # Save assistant msg
+                    # Save assistant response
                     if st.session_state.current_session_id:
                         supabase.table("chat_messages").insert({
                             "session_id": st.session_state.current_session_id,
@@ -746,6 +748,7 @@ with tabs[3]:
                 except Exception as e:
                     st.error(f"Chat failed: {e}")
 
+
         # ==================================================================
         # === NEW CHAT BUTTON =============================================
         # ==================================================================
@@ -754,74 +757,62 @@ with tabs[3]:
 
             if st.button("New Chat", use_container_width=True):
 
-                # Extract user messages only
+                # Extract user text for summary
                 preview_text = " ".join(
                     [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
                 )[:2000]
 
-                # ----------------------------------------------------------
-                # Generate TITLE (3–5 words)
-                # ----------------------------------------------------------
+                # ---------- TITLE ----------
                 try:
                     title_prompt = (
-                        "Summarize the main topic of this conversation in 3–5 plain words. "
-                        "No punctuation. No emojis.\n\n"
+                        "Summarize the conversation topic in 3–5 plain words. "
+                        "No punctuation, no emojis.\n\n"
                         f"{preview_text}"
                     )
-
                     title_resp = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[{"role": "user", "content": title_prompt}],
                         max_tokens=15,
                     )
-
                     title_text = title_resp.choices[0].message.content.strip()
-
-                except Exception:
+                except:
                     title_text = "Untitled chat"
 
-                # ----------------------------------------------------------
-                # Generate BULLET-POINT SUMMARY
-                # ----------------------------------------------------------
+                # ---------- BULLET SUMMARY ----------
                 try:
-                    bullet_prompt = (
-                        "Write a concise bullet-point summary (3–6 bullets) "
-                        "of the user's conversation. Use short, clear bullets.\n\n"
+                    summary_prompt = (
+                        "Write a clean bullet-point summary of the user's conversation.\n"
+                        "- Use 3–6 bullets.\n"
+                        "- Keep each bullet short.\n\n"
                         f"{preview_text}"
                     )
-
                     summary_resp = client.chat.completions.create(
                         model="gpt-4o-mini",
-                        messages=[{"role": "user", "content": bullet_prompt}],
+                        messages=[{"role": "user", "content": summary_prompt}],
                         max_tokens=200,
                     )
-
                     summary_text = summary_resp.choices[0].message.content.strip()
-
-                except Exception:
+                except:
                     summary_text = "- No summary available."
 
-                # Insert a new chat session (title + summary)
+                # Save session to Supabase
                 result = (
                     supabase.table("chat_sessions")
                     .insert({"title": title_text, "summary": summary_text})
                     .execute()
                 )
 
-                new_session = result.data[0]
-                new_session_id = new_session["id"]
-
-                # Set as active session
+                new_session_id = result.data[0]["id"]
                 st.session_state.current_session_id = new_session_id
 
-                # Reset UI chat
+                # Reset active messages
                 st.session_state.active_chat = []
 
                 # Refresh sidebar
                 st.session_state.chat_sessions = (
                     supabase.table("chat_sessions")
                     .select("*")
-                    .order("updated_at", desc=True)
+                    .order("id", desc=True)
                     .execute()
                     .data
                 )
