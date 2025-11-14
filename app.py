@@ -279,9 +279,6 @@ with tabs[0]:
         end = start + PER_PAGE
         results = results_all[start:end]
 
-        st.caption(st.session_state.search_message)
-        st.success(f"Showing {len(results)} of {total} results")
-
     else:
         # DEFAULT MODE (SHOW ALL COLLECTORS)
         start = st.session_state.default_page * PER_PAGE
