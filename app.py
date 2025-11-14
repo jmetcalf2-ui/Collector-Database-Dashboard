@@ -128,7 +128,7 @@ def summarize_collector(lead_id: str, combined_notes: str) -> str:
         return f"⚠️ OpenAI error: {e}"
 
 # ======================================================================
-# === SEARCH TAB (FINAL VERSION — BUG FIXED + 50 PER PAGE) =============
+# === SEARCH TAB (FINAL VERSION WITH AUTO-CLEAR + PAGINATION) ==========
 # ======================================================================
 with tabs[0]:
     st.markdown("## Search")
@@ -162,17 +162,18 @@ with tabs[0]:
         placeholder="e.g. Minimalism collectors or those following Bruce Nauman",
     )
 
-    # AUTO-CLEAR WHEN SEARCH FIELDS EMPTY
+    # ------------------------------------------------------------------
+    # AUTO-CLEAR SEARCH WHEN FIELDS ARE EMPTY
+    # ------------------------------------------------------------------
     if (
-        keyword.strip() == ""
-        and city.strip() == ""
-        and country.strip() == ""
-        and role.strip() == ""
+        keyword.strip() == "" 
+        and city.strip() == "" 
+        and country.strip() == "" 
+        and role.strip() == "" 
         and (tier == "" or tier is None)
         and semantic_query.strip() == ""
     ):
         st.session_state["search_results"] = None
-        st.session_state["search_page"] = 0
 
     # ------------------------------------------------------------------
     # SEARCH LOGIC
@@ -193,21 +194,24 @@ with tabs[0]:
                         "rpc_semantic_search_leads_supplements",
                         {
                             "query_embedding": list(map(float, emb)),
-                            "match_count": 300,
+                            "match_count": 200,
                             "min_score": 0.10,
                         },
                     ).execute()
 
-                    results = [{
-                        "lead_id": r.get("lead_id"),
-                        "full_name": r.get("full_name"),
-                        "email": r.get("email"),
-                        "tier": r.get("tier"),
-                        "primary_role": r.get("primary_role"),
-                        "city": r.get("city"),
-                        "country": r.get("country"),
-                        "notes": r.get("notes"),
-                    } for r in (rpc.data or [])]
+                    results = [
+                        {
+                            "lead_id": r.get("lead_id"),
+                            "full_name": r.get("full_name"),
+                            "email": r.get("email"),
+                            "tier": r.get("tier"),
+                            "primary_role": r.get("primary_role"),
+                            "city": r.get("city"),
+                            "country": r.get("country"),
+                            "notes": r.get("notes"),
+                        }
+                        for r in (rpc.data or [])
+                    ]
 
                 except Exception as e:
                     st.error("Semantic search failed.")
@@ -226,6 +230,7 @@ with tabs[0]:
                         query = query.or_(
                             f"full_name.ilike.{q},email.ilike.{q},primary_role.ilike.{q}"
                         )
+
                     if city:
                         query = query.ilike("city", f"%{city}%")
                     if country:
@@ -235,18 +240,18 @@ with tabs[0]:
                     if role:
                         query = query.ilike("primary_role", f"%{role}%")
 
-                    results = query.limit(5000).execute().data or []
+                    results = query.limit(200).execute().data or []
 
                 except Exception as e:
                     st.error("Search failed.")
                     st.code(str(e))
                     results = []
 
+        # save to session state
         st.session_state["search_results"] = results
-        st.session_state["search_page"] = 0
 
     # ------------------------------------------------------------------
-    # GET RESULTS FROM SESSION
+    # GET CURRENT RESULTS
     # ------------------------------------------------------------------
     results = st.session_state.get("search_results", None)
 
@@ -254,7 +259,7 @@ with tabs[0]:
     # PAGINATION
     # ------------------------------------------------------------------
     if results:
-        per_page = 50  # <<<<<<<< 50 PER PAGE
+        per_page = 20
 
         if "search_page" not in st.session_state:
             st.session_state.search_page = 0
@@ -266,11 +271,11 @@ with tabs[0]:
         end = start + per_page
         page_results = results[start:end]
 
-        # -----------------------------------------
-        # RESULTS HEADER — CLEAN (NO GREEN BOX)
-        # -----------------------------------------
+        # ------------------------------------------------------------------
+        # RESULTS HEADER
+        # ------------------------------------------------------------------
         st.markdown(f"<div class='search-spacer'></div>", unsafe_allow_html=True)
-        st.write(f"Showing {len(page_results)} of {total_results} collectors")
+        st.write(f"Showing {len(page_results)} of {total_results} results")
 
         # ------------------------------------------------------------------
         # GRID DISPLAY (2 COLUMNS)
@@ -307,19 +312,22 @@ with tabs[0]:
                         if summary_key not in st.session_state:
                             if st.button(f"Summarize {name}", key=f"sum_{lead_id}"):
                                 with st.spinner("Summarizing notes..."):
-                                    supplements = supabase.table("leads_supplements")\
-                                        .select("notes")\
-                                        .eq("lead_id", lead_id)\
-                                        .execute().data or []
+                                    supplements = (
+                                        supabase.table("leads_supplements")
+                                        .select("notes")
+                                        .eq("lead_id", lead_id)
+                                        .execute()
+                                        .data or []
+                                    )
                                     base_notes = lead.get("notes") or ""
                                     supplement_notes = "\n\n".join(
                                         (s.get("notes") or "").strip()
                                         for s in supplements
                                     )
                                     combined = (
-                                        base_notes +
-                                        ("\n\n" if base_notes and supplement_notes else "") +
-                                        supplement_notes
+                                        base_notes
+                                        + ("\n\n" if base_notes and supplement_notes else "")
+                                        + supplement_notes
                                     ).strip()
                                     summary = summarize_collector(lead_id, combined)
                                     st.session_state[summary_key] = summary
@@ -348,13 +356,16 @@ with tabs[0]:
         # PAGINATION BUTTONS
         # ------------------------------------------------------------------
         prev_col, next_col = st.columns([1, 1])
+
         with prev_col:
             if st.button("Prev", disabled=st.session_state.search_page == 0):
                 st.session_state.search_page -= 1
                 st.rerun()
 
         with next_col:
-            if st.button("Next", disabled=st.session_state.search_page >= total_pages - 1):
+            if st.button(
+                "Next", disabled=st.session_state.search_page >= total_pages - 1
+            ):
                 st.session_state.search_page += 1
                 st.rerun()
 
