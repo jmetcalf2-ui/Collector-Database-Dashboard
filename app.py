@@ -579,7 +579,7 @@ with tabs[3]:
     # --- Initialize OpenAI client ---
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # ✅ ADD THIS BLOCK TO LOAD CHAT SESSIONS FROM SUPABASE
+    # --- Initialize session_state holders ---
     if "chat_sessions" not in st.session_state:
         st.session_state.chat_sessions = (
             supabase.table("chat_sessions")
@@ -588,6 +588,12 @@ with tabs[3]:
             .execute()
             .data
         )
+
+    if "active_chat" not in st.session_state:
+        st.session_state.active_chat = []
+
+    if "current_session_id" not in st.session_state:
+        st.session_state.current_session_id = None
 
     # --- Layout (match width with Search tab) ---
     chat_container_full = st.container()
@@ -604,23 +610,26 @@ with tabs[3]:
         )
         left, right = st.columns([2.4, 6.6], gap="large")
 
-    # --- LEFT COLUMN: Chat History ---
+    # ======================================================================
+    # === LEFT COLUMN: CHAT HISTORY ========================================
+    # ======================================================================
     with left:
         st.markdown("### Chats")
+
         if not st.session_state.chat_sessions:
             st.info("No previous chats yet.")
         else:
-            for i, session in enumerate(reversed(st.session_state.chat_sessions)):
-                summary = session.get("summary", "Untitled chat")
-                # Show only the chat title (summary) — no timestamp
-                label = f"{summary}"
+            for i, session in enumerate(st.session_state.chat_sessions):
+                title = session.get("title", "Untitled chat")
+                label = f"{title}"
+
                 if st.button(label, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
 
-                    # Set current session ID
+                    # Set active session ID
                     session_id = session["id"]
                     st.session_state.current_session_id = session_id
-                
-                    # Fetch messages for this session
+
+                    # Load messages for this session
                     msgs = (
                         supabase.table("chat_messages")
                         .select("*")
@@ -629,23 +638,23 @@ with tabs[3]:
                         .execute()
                         .data
                     )
-                
-                    # Convert DB rows → your chat format
+
                     st.session_state.active_chat = [
                         {"role": m["role"], "content": m["content"]} 
                         for m in msgs
                     ]
-                
+
                     st.rerun()
 
-
-    # --- RIGHT COLUMN: Active Chat ---
+    # ======================================================================
+    # === RIGHT COLUMN: ACTIVE CHAT WINDOW =================================
+    # ======================================================================
     with right:
         st.markdown("#### Current Chat")
-    
+
         chat_container = st.container()
-    
-        # --- Render chat messages (clean markdown style) ---
+
+        # --- Render Chat Messages ---
         for msg in st.session_state.active_chat:
             if msg["role"] == "user":
                 st.markdown(
@@ -687,60 +696,112 @@ with tabs[3]:
                     """,
                     unsafe_allow_html=True
                 )
-    
-        # --- Chat input ---
+
         st.markdown("<div style='clear:both'></div>", unsafe_allow_html=True)
+
+        # ==================================================================
+        # === INPUT MESSAGE ===============================================
+        # ==================================================================
         user_input = st.chat_input("Ask about collectors, regions, or interests...")
-    
+
         if user_input:
+
+            # Append to UI
             st.session_state.active_chat.append({"role": "user", "content": user_input})
-    
+
+            # Save user message if a chat session exists
+            if st.session_state.current_session_id:
+                supabase.table("chat_messages").insert({
+                    "session_id": st.session_state.current_session_id,
+                    "role": "user",
+                    "content": user_input,
+                }).execute()
+
             with st.spinner("Thinking..."):
                 try:
+                    # Prepare messages
                     messages = [{"role": "system", "content": system_prompt}]
                     messages.extend(st.session_state.active_chat)
+
                     completion = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=messages,
                         temperature=0.5,
                         max_tokens=700,
                     )
+
                     response_text = completion.choices[0].message.content.strip()
-    
-                    # Append response and re-render
+
+                    # Append assistant message to UI
                     st.session_state.active_chat.append({"role": "assistant", "content": response_text})
+
+                    # Save assistant message
+                    if st.session_state.current_session_id:
+                        supabase.table("chat_messages").insert({
+                            "session_id": st.session_state.current_session_id,
+                            "role": "assistant",
+                            "content": response_text,
+                        }).execute()
+
                     st.rerun()
+
                 except Exception as e:
                     st.error(f"Chat failed: {e}")
 
-
-        # --- New Chat Button ---
+        # ==================================================================
+        # === NEW CHAT BUTTON =============================================
+        # ==================================================================
         if st.session_state.active_chat:
             st.divider()
             if st.button("New Chat", use_container_width=True):
+
+                # Create summary
                 try:
                     preview_text = " ".join(
                         [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
                     )[:600]
+
                     summary_prompt = (
-                        "Summarize this conversation in 3–5 plain words, no emojis or punctuation. "
-                        "Example: 'European collectors trends'.\n\n"
+                        "Summarize this conversation in 3–5 plain words, no emojis or punctuation.\n\n"
                         f"{preview_text}"
                     )
+
                     summary_resp = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[{"role": "user", "content": summary_prompt}],
                         max_tokens=20,
                         temperature=0.5,
                     )
+
                     summary_text = summary_resp.choices[0].message.content.strip()
+
                 except Exception:
                     summary_text = "Untitled chat"
 
-                st.session_state.chat_sessions.append({
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "summary": summary_text,
-                    "history": st.session_state.active_chat.copy(),
-                })
+                # Create a new chat session in Supabase
+                result = (
+                    supabase.table("chat_sessions")
+                    .insert({"title": summary_text})
+                    .execute()
+                )
+
+                new_session = result.data[0]
+                new_session_id = new_session["id"]
+
+                # Set this as the active session
+                st.session_state.current_session_id = new_session_id
+
+                # Reset UI
                 st.session_state.active_chat = []
+
+                # Refresh sidebar
+                st.session_state.chat_sessions = (
+                    supabase.table("chat_sessions")
+                    .select("*")
+                    .order("updated_at", desc=True)
+                    .execute()
+                    .data
+                )
+
                 st.rerun()
+
