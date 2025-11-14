@@ -694,12 +694,9 @@ with tabs[3]:
 
             st.markdown(
                 """
-                <h3 style="
-                    margin-top: 0px;
-                    padding-top: 0px;
-                    font-size: 1.4rem;
-                    font-weight: 600;
-                ">Current Chat</h3>
+                <div style="font-size:22px; font-weight:600; margin-bottom:0.5rem;">
+                    Current Chat
+                </div>
                 """,
                 unsafe_allow_html=True
             )
