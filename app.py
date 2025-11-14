@@ -272,7 +272,7 @@ with tabs[0]:
         leads = (
             supabase.table("leads")
             .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
-            .order("full_name", asc=True)
+            .order("full_name", desc=False)
             .range(offset, offset + per_page - 1)
             .execute()
             .data or []
