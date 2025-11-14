@@ -611,46 +611,54 @@ with tabs[3]:
 
 
     # ======================================================================
-    # === LEFT COLUMN: SAVED CHATS =========================================
+    # === LEFT COLUMN: CHAT HISTORY ========================================
     # ======================================================================
     with left:
         st.markdown("### Chats")
-
+    
         if not st.session_state.chat_sessions:
             st.info("No previous chats yet.")
         else:
             for i, session in enumerate(st.session_state.chat_sessions):
-
+    
                 title = session.get("title", "Untitled chat")
                 summary = session.get("summary", "")
-
-                # --- Chat title button ---
-                if st.button(title, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
-                    session_id = session["id"]
-                    st.session_state.current_session_id = session_id
-
-                    # Load messages for session
-                    msgs = (
-                        supabase.table("chat_messages")
-                        .select("*")
-                        .eq("session_id", session_id)
-                        .order("id", asc=True)
-                        .execute()
-                        .data
+    
+                # ---- GROUP BUTTON + SUMMARY INTO ONE CARD ----
+                with st.container():
+                    # Chat title button
+                    clicked = st.button(
+                        title,
+                        key=f"chat_button_{i}",
+                        use_container_width=True,
+                        type="secondary"
                     )
-
-                    st.session_state.active_chat = [
-                        {"role": m["role"], "content": m["content"]}
-                        for m in msgs
-                    ]
-
-                    st.rerun()
-
-                # --- Collapsible bullet-point summary ---
-                if summary:
-                    with st.expander("Summary", expanded=False):
-                        st.markdown(summary)
-
+    
+                    # Summary expander (kept attached to the button visually)
+                    if summary:
+                        with st.expander("Summary", expanded=False):
+                            st.markdown(summary)
+    
+                    # Handle click
+                    if clicked:
+                        session_id = session["id"]
+                        st.session_state.current_session_id = session_id
+    
+                        msgs = (
+                            supabase.table("chat_messages")
+                            .select("*")
+                            .eq("session_id", session_id)
+                            .order("id", desc=False)   # FIXED — no asc=True
+                            .execute()
+                            .data
+                        )
+    
+                        st.session_state.active_chat = [
+                            {"role": m["role"], "content": m["content"]}
+                            for m in msgs
+                        ]
+    
+                        st.rerun()
 
     # ======================================================================
     # === RIGHT COLUMN: ACTIVE CHAT WINDOW =================================
