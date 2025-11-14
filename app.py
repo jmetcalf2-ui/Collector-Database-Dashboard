@@ -367,7 +367,7 @@ NOTES:
                             st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
 
         # Pagination
-        prev_col, next_col = st.columns([1,1])
+        col_space_left, prev_col, next_col, col_space_right = st.columns([2,1,1,2])
         with prev_col:
             if st.button("Prev Page", disabled=st.session_state.full_grid_page==0):
                 st.session_state.full_grid_page -= 1
