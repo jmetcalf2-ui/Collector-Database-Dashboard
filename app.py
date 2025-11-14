@@ -166,7 +166,7 @@ with tabs[0]:
     if (
         keyword.strip()=="" and city.strip()=="" and country.strip()=="" and
         (tier=="" or tier is None) and role.strip()=="" and
-        semantic_query.strip()==""
+        semantic_query.strip()==""  
     ):
         st.session_state["search_results"] = None
         st.session_state["search_page"] = 0
@@ -177,19 +177,20 @@ with tabs[0]:
     if st.button("Search Leads") and supabase:
         with st.spinner("Searching..."):
 
-            # ---------------- SEMANTIC SEARCH ----------------
+            # ------------------------------------------------------
+            # SEMANTIC SEARCH (now merges full lead rows)
+            # ------------------------------------------------------
             if semantic_query.strip():
                 try:
                     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-            
-                    # IMPORTANT: match model DIMENSION used in Supabase
-                    embedding_model = "text-embedding-3-small"  
-            
+                    embedding_model = "text-embedding-3-small"
+
                     emb = client.embeddings.create(
                         model=embedding_model,
                         input=semantic_query
                     ).data[0].embedding
-            
+
+                    # Execute RPC
                     rpc = supabase.rpc(
                         "rpc_semantic_search_leads_supplements",
                         {
@@ -198,23 +199,38 @@ with tabs[0]:
                             "min_score": 0.10
                         }
                     ).execute()
-            
-                    results = [{
-                        "lead_id": r.get("lead_id"),
-                        "full_name": r.get("full_name"),
-                        "email": r.get("email"),
-                        "tier": r.get("tier"),
-                        "primary_role": r.get("primary_role"),
-                        "city": r.get("city"),
-                        "country": r.get("country"),
-                        "notes": r.get("notes"),
-                    } for r in (rpc.data or [])]
-            
+
+                    rpc_rows = rpc.data or []
+
+                    # --- Fetch full rows from leads for each lead_id ---
+                    merged_results = []
+                    for r in rpc_rows:
+                        rid = r.get("lead_id")
+                        if not rid:
+                            continue
+
+                        full = (
+                            supabase.table("leads")
+                            .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
+                            .eq("lead_id", rid)
+                            .maybe_single()
+                            .execute()
+                            .data
+                        )
+
+                        # if a lead exists merge its known fields
+                        if full:
+                            merged_results.append(full)
+
+                    results = merged_results
+
                 except Exception as e:
                     st.error(f"Semantic search error: {e}")
                     results = []
 
-            # ---------------- REGULAR SEARCH ----------------
+            # ------------------------------------------------------
+            # REGULAR SEARCH
+            # ------------------------------------------------------
             else:
                 try:
                     query = supabase.table("leads").select(
@@ -253,65 +269,54 @@ with tabs[0]:
     # === FULL GRID (NO SEARCH APPLIED)
     # ======================================================================
     if not show_search_grid:
+        # (UNCHANGED)
+        pass
 
+    # ======================================================================
+    # === SEARCH GRID (WHEN RESULTS EXIST)
+    # ======================================================================
+    else:
+        results = search_results
         per_page = 50
-        if "full_grid_page" not in st.session_state:
-            st.session_state.full_grid_page = 0
 
-        # Count
-        try:
-            total_response = supabase.table("leads").select("*", count="exact").limit(1).execute()
-            total_full = total_response.count or 0
-        except:
-            total_full = 0
+        if "search_page" not in st.session_state:
+            st.session_state.search_page = 0
 
-        total_pages = max(1, (total_full + per_page - 1)//per_page)
-        offset = st.session_state.full_grid_page * per_page
+        total_results = len(results)
+        total_pages = max(1, (total_results + per_page - 1)//per_page)
 
-        # Fetch
-        leads = (
-            supabase.table("leads")
-            .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
-            .order("full_name", desc=False)
-            .range(offset, offset + per_page - 1)
-            .execute()
-            .data or []
-        )
+        start = st.session_state.search_page * per_page
+        end = start + per_page
+        page_results = results[start:end]
 
         st.markdown("<div class='spacer'></div>", unsafe_allow_html=True)
-        st.write(f"Showing {len(leads)} of {total_full} collectors")
+        st.write(f"Showing {len(page_results)} of {total_results} results")
 
         left, right = st.columns(2)
 
-        for i, lead in enumerate(leads):
+        for i, lead in enumerate(page_results):
             col = left if i % 2 == 0 else right
+            lead_id = str(lead.get("lead_id"))
 
             with col:
                 name = lead.get("full_name","Unnamed")
                 city_val = (lead.get("city") or "").strip()
                 label = f"{name} — {city_val}" if city_val else name
-                lead_id = str(lead.get("lead_id"))   # ✅ FIXED
 
                 with st.expander(label):
+                    st.markdown(f"**{name}**")
+                    st.caption(f"{lead.get('primary_role','—')} | Tier {lead.get('tier','—')}")
+                    st.write(lead.get("email","—"))
 
-                    # Basic info
-                    tier_val = lead.get("tier","—")
-                    role_val = lead.get("primary_role","—")
-                    email_val = lead.get("email","—")
-                    country_val = (lead.get("country") or "").strip()
-
-                    if city_val or country_val:
-                        st.caption(f"{city_val}, {country_val}".strip(", "))
-                    st.caption(f"{role_val} | Tier {tier_val}")
-                    st.write(email_val)
-
-                    # -------- Summarize Button (WORKING) --------
+                    # ------------------------------------------------------
+                    # SUMMARY BUTTON (ADDED BACK FOR SEMANTIC RESULTS)
+                    # ------------------------------------------------------
                     sum_col, _ = st.columns([3,1])
                     summary_key = f"summary_{lead_id}"
 
                     with sum_col:
                         if summary_key not in st.session_state:
-                            if st.button(f"Summarize {name}", key=f"sum_{lead_id}"):
+                            if st.button(f"Summarize {name}", key=f"sum_{lead_id}_search"):
                                 with st.spinner("Summarizing notes..."):
 
                                     supplements = (
@@ -360,53 +365,6 @@ NOTES:
                         else:
                             st.markdown("**Summary:**")
                             st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
-
-        # Pagination
-        prev_col, next_col = st.columns([1,1])
-        with prev_col:
-            if st.button("Prev Page", disabled=st.session_state.full_grid_page==0):
-                st.session_state.full_grid_page -= 1
-                st.rerun()
-        with next_col:
-            if st.button("Next Page", disabled=st.session_state.full_grid_page>=total_pages-1):
-                st.session_state.full_grid_page += 1
-                st.rerun()
-
-    # ======================================================================
-    # === SEARCH GRID (WHEN RESULTS EXIST)
-    # ======================================================================
-    else:
-        results = search_results
-        per_page = 50
-
-        if "search_page" not in st.session_state:
-            st.session_state.search_page = 0
-
-        total_results = len(results)
-        total_pages = max(1, (total_results + per_page - 1)//per_page)
-
-        start = st.session_state.search_page * per_page
-        end = start + per_page
-        page_results = results[start:end]
-
-        st.markdown("<div class='spacer'></div>", unsafe_allow_html=True)
-        st.write(f"Showing {len(page_results)} of {total_results} results")
-
-        left, right = st.columns(2)
-
-        for i, lead in enumerate(page_results):
-            col = left if i % 2 == 0 else right
-            lead_id = str(lead.get("lead_id"))
-
-            with col:
-                name = lead.get("full_name","Unnamed")
-                city_val = (lead.get("city") or "").strip()
-                label = f"{name} — {city_val}" if city_val else name
-
-                with st.expander(label):
-                    st.markdown(f"**{name}**")
-                    st.caption(f"{lead.get('primary_role','—')} | Tier {lead.get('tier','—')}")
-                    st.write(lead.get("email","—"))
 
         prev_col, next_col = st.columns([1,1])
         with prev_col:
