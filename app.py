@@ -181,20 +181,24 @@ with tabs[0]:
             if semantic_query.strip():
                 try:
                     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+            
+                    # IMPORTANT: match model DIMENSION used in Supabase
+                    embedding_model = "text-embedding-3-small"  
+            
                     emb = client.embeddings.create(
-                        model=os.getenv("EMBEDDING_MODEL","text-embedding-3-large"),
+                        model=embedding_model,
                         input=semantic_query
                     ).data[0].embedding
-
+            
                     rpc = supabase.rpc(
                         "rpc_semantic_search_leads_supplements",
                         {
-                            "query_embedding": list(map(float, emb)),
+                            "query_embedding": emb,
                             "match_count": 300,
                             "min_score": 0.10
                         }
                     ).execute()
-
+            
                     results = [{
                         "lead_id": r.get("lead_id"),
                         "full_name": r.get("full_name"),
@@ -205,8 +209,9 @@ with tabs[0]:
                         "country": r.get("country"),
                         "notes": r.get("notes"),
                     } for r in (rpc.data or [])]
-
-                except:
+            
+                except Exception as e:
+                    st.error(f"Semantic search error: {e}")
                     results = []
 
             # ---------------- REGULAR SEARCH ----------------
