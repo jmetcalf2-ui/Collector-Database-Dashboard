@@ -290,7 +290,6 @@ with tabs[0]:
                 with st.expander(label):
 
                     # Basic info
-                    st.markdown(f"**{name}**")
                     tier_val = lead.get("tier","—")
                     role_val = lead.get("primary_role","—")
                     email_val = lead.get("email","—")
