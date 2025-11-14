@@ -162,7 +162,7 @@ with tabs[0]:
         placeholder="e.g. Minimalism collectors or those following Bruce Nauman"
     )
 
-    # When all fields empty → clear search
+    # Auto-clear search when everything is empty
     if (
         keyword.strip()=="" and city.strip()=="" and country.strip()=="" and
         (tier=="" or tier is None) and role.strip()=="" and
@@ -206,7 +206,7 @@ with tabs[0]:
                         "notes": r.get("notes"),
                     } for r in (rpc.data or [])]
 
-                except Exception as e:
+                except:
                     results = []
 
             # ---------------- REGULAR SEARCH ----------------
@@ -242,18 +242,13 @@ with tabs[0]:
     # DETERMINE WHICH GRID TO SHOW
     # ============================================================
     search_results = st.session_state.get("search_results", None)
-
-    # If there are search results → show search grid  
-    # If no search results but search was attempted → show "no collectors match"
-    # If no search attempted → show full collector grid
     show_search_grid = search_results is not None
 
-    # ============================================================
-    # FULL GRID (DEFAULT — NO SEARCH)
-    # ============================================================
+    # ======================================================================
+    # === FULL GRID (NO SEARCH APPLIED)
+    # ======================================================================
     if not show_search_grid:
 
-        # ---- Fetch full list paginated ----
         per_page = 50
         if "full_grid_page" not in st.session_state:
             st.session_state.full_grid_page = 0
@@ -281,7 +276,6 @@ with tabs[0]:
         st.markdown("<div class='spacer'></div>", unsafe_allow_html=True)
         st.write(f"Showing {len(leads)} of {total_full} collectors")
 
-        # ---- GRID (2 columns) ----
         left, right = st.columns(2)
 
         for i, lead in enumerate(leads):
@@ -291,8 +285,11 @@ with tabs[0]:
                 name = lead.get("full_name","Unnamed")
                 city_val = (lead.get("city") or "").strip()
                 label = f"{name} — {city_val}" if city_val else name
+                lead_id = str(lead.get("lead_id"))   # ✅ FIXED
 
                 with st.expander(label):
+
+                    # Basic info
                     st.markdown(f"**{name}**")
                     tier_val = lead.get("tier","—")
                     role_val = lead.get("primary_role","—")
@@ -301,92 +298,83 @@ with tabs[0]:
 
                     if city_val or country_val:
                         st.caption(f"{city_val}, {country_val}".strip(", "))
-
                     st.caption(f"{role_val} | Tier {tier_val}")
                     st.write(email_val)
 
-                    # ---------------------------------------------------------
-                    #   INSERT SUMMARIZE BUTTON HERE (THIS GOES RIGHT AFTER)
-                    # ---------------------------------------------------------
-                    sum_col, del_col = st.columns([3, 1])
-                
+                    # -------- Summarize Button (WORKING) --------
+                    sum_col, _ = st.columns([3,1])
+                    summary_key = f"summary_{lead_id}"
+
                     with sum_col:
-                        summary_key = f"summary_{lead_id}"
-                
                         if summary_key not in st.session_state:
                             if st.button(f"Summarize {name}", key=f"sum_{lead_id}"):
                                 with st.spinner("Summarizing notes..."):
-                                    try:
-                                        supplements = (
-                                            supabase.table("leads_supplements")
-                                            .select("notes")
-                                            .eq("lead_id", lead_id)
-                                            .execute()
-                                            .data or []
-                                        )
-                
-                                        base_notes = lead.get("notes") or ""
-                                        supplement_notes = "\n\n".join(
-                                            (s.get("notes") or "").strip()
-                                            for s in supplements
-                                        )
-                
-                                        combined_notes = (
-                                            base_notes +
-                                            ("\n\n" if base_notes and supplement_notes else "") +
-                                            supplement_notes
-                                        ).strip()
-                
-                                        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                                        prompt = f"""
-                Summarize the following collector notes into 5–7 factual bullet points.
-                Avoid adjectives. Focus on artists collected, museum affiliations, geography,
-                philanthropy, collecting tendencies, and notable acquisitions.
-                
-                NOTES:
-                {combined_notes}
-                """
-                
-                                        completion = client.chat.completions.create(
-                                            model="gpt-4o-mini",
-                                            messages=[
-                                                {"role": "system", "content": "You summarize art collectors factually."},
-                                                {"role": "user", "content": prompt},
-                                            ],
-                                            temperature=0.2,
-                                            max_tokens=500,
-                                        )
-                                        summary_text = completion.choices[0].message.content.strip()
-                
-                                        st.session_state[summary_key] = summary_text
-                                        st.rerun()
-                
-                                    except Exception as e:
-                                        st.error(f"Summarization failed: {e}")
-                
+
+                                    supplements = (
+                                        supabase.table("leads_supplements")
+                                        .select("notes")
+                                        .eq("lead_id", lead_id)
+                                        .execute()
+                                        .data or []
+                                    )
+
+                                    base_notes = lead.get("notes") or ""
+                                    supplement_notes = "\n\n".join(
+                                        (s.get("notes") or "").strip()
+                                        for s in supplements
+                                    )
+
+                                    combined = (
+                                        base_notes +
+                                        ("\n\n" if base_notes and supplement_notes else "") +
+                                        supplement_notes
+                                    ).strip()
+
+                                    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                                    prompt = f"""
+Summarize these collector notes into 5–7 factual bullet points.
+Avoid adjectives. Focus on artists collected, museum affiliations, geography,
+philanthropy, acquisitions, and collecting tendencies.
+
+NOTES:
+{combined}
+"""
+
+                                    resp = client.chat.completions.create(
+                                        model="gpt-4o-mini",
+                                        messages=[
+                                            {"role": "system", "content":"You summarize art collectors factually."},
+                                            {"role": "user", "content": prompt},
+                                        ],
+                                        temperature=0.2,
+                                        max_tokens=500
+                                    )
+
+                                    st.session_state[summary_key] = resp.choices[0].message.content.strip()
+                                    st.rerun()
+
                         else:
                             st.markdown("**Summary:**")
                             st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
 
-
-        # ---- Pagination ----
+        # Pagination
         prev_col, next_col = st.columns([1,1])
         with prev_col:
             if st.button("Prev Page", disabled=st.session_state.full_grid_page==0):
                 st.session_state.full_grid_page -= 1
                 st.rerun()
         with next_col:
-            if st.button("Next Page", disabled=st.session_state.full_grid_page >= total_pages-1):
+            if st.button("Next Page", disabled=st.session_state.full_grid_page>=total_pages-1):
                 st.session_state.full_grid_page += 1
                 st.rerun()
 
-    # ============================================================
-    # SEARCH GRID
-    # ============================================================
+    # ======================================================================
+    # === SEARCH GRID (WHEN RESULTS EXIST)
+    # ======================================================================
     else:
         results = search_results
-
         per_page = 50
+
         if "search_page" not in st.session_state:
             st.session_state.search_page = 0
 
@@ -404,6 +392,7 @@ with tabs[0]:
 
         for i, lead in enumerate(page_results):
             col = left if i % 2 == 0 else right
+            lead_id = str(lead.get("lead_id"))
 
             with col:
                 name = lead.get("full_name","Unnamed")
@@ -412,25 +401,16 @@ with tabs[0]:
 
                 with st.expander(label):
                     st.markdown(f"**{name}**")
-                    tier_val = lead.get("tier","—")
-                    role_val = lead.get("primary_role","—")
-                    email_val = lead.get("email","—")
-                    country_val = (lead.get("country") or "").strip()
+                    st.caption(f"{lead.get('primary_role','—')} | Tier {lead.get('tier','—')}")
+                    st.write(lead.get("email","—"))
 
-                    if city_val or country_val:
-                        st.caption(f"{city_val}, {country_val}".strip(", "))
-
-                    st.caption(f"{role_val} | Tier {tier_val}")
-                    st.write(email_val)
-
-        # ---- Pagination ----
         prev_col, next_col = st.columns([1,1])
         with prev_col:
             if st.button("Prev Results", disabled=st.session_state.search_page==0):
                 st.session_state.search_page -= 1
                 st.rerun()
         with next_col:
-            if st.button("Next Results", disabled=st.session_state.search_page >= total_pages-1):
+            if st.button("Next Results", disabled=st.session_state.search_page>=total_pages-1):
                 st.session_state.search_page += 1
                 st.rerun()
 
