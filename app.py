@@ -692,7 +692,17 @@ with tabs[3]:
         # --------------------------------------------------------------
         else:
 
-            st.markdown("#### Current Chat")
+            st.markdown(
+                """
+                <h3 style="
+                    margin-top: 0px;
+                    padding-top: 0px;
+                    font-size: 1.4rem;
+                    font-weight: 600;
+                ">Current Chat</h3>
+                """,
+                unsafe_allow_html=True
+            )
 
             # Render chat bubbles
             for msg in st.session_state.active_chat:
