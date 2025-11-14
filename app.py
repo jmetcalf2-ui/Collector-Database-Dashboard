@@ -560,7 +560,6 @@ with tabs[2]:
                 with st.expander(f"{s['name']}"):
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
-# ======================================================================
 # === CHAT TAB =========================================================
 # ======================================================================
 with tabs[3]:
@@ -588,7 +587,6 @@ with tabs[3]:
         .execute()
         .data
     )
-
 
     if "active_chat" not in st.session_state:
         st.session_state.active_chat = []
@@ -622,10 +620,13 @@ with tabs[3]:
         else:
             for i, session in enumerate(st.session_state.chat_sessions):
 
-                # Correct — Supabase column name is "title"
                 title = session.get("title", "Untitled chat")
+                summary = session.get("summary", "")
 
-                if st.button(title, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
+                # Card-style display with bullet summary
+                label = f"**{title}**\n\n{summary}"
+
+                if st.button(label, key=f"chat_open_{i}", use_container_width=True, type="secondary"):
 
                     session_id = session["id"]
                     st.session_state.current_session_id = session_id
@@ -753,33 +754,57 @@ with tabs[3]:
 
             if st.button("New Chat", use_container_width=True):
 
-                # Produce a 3–5 word title
-                try:
-                    preview_text = " ".join(
-                        [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
-                    )[:600]
+                # Extract user messages only
+                preview_text = " ".join(
+                    [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
+                )[:2000]
 
-                    summary_prompt = (
-                        "Summarize this conversation in 3–5 plain words, no emojis or punctuation.\n\n"
+                # ----------------------------------------------------------
+                # Generate TITLE (3–5 words)
+                # ----------------------------------------------------------
+                try:
+                    title_prompt = (
+                        "Summarize the main topic of this conversation in 3–5 plain words. "
+                        "No punctuation. No emojis.\n\n"
+                        f"{preview_text}"
+                    )
+
+                    title_resp = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": title_prompt}],
+                        max_tokens=15,
+                    )
+
+                    title_text = title_resp.choices[0].message.content.strip()
+
+                except Exception:
+                    title_text = "Untitled chat"
+
+                # ----------------------------------------------------------
+                # Generate BULLET-POINT SUMMARY
+                # ----------------------------------------------------------
+                try:
+                    bullet_prompt = (
+                        "Write a concise bullet-point summary (3–6 bullets) "
+                        "of the user's conversation. Use short, clear bullets.\n\n"
                         f"{preview_text}"
                     )
 
                     summary_resp = client.chat.completions.create(
                         model="gpt-4o-mini",
-                        messages=[{"role": "user", "content": summary_prompt}],
-                        max_tokens=20,
-                        temperature=0.5,
+                        messages=[{"role": "user", "content": bullet_prompt}],
+                        max_tokens=200,
                     )
 
                     summary_text = summary_resp.choices[0].message.content.strip()
 
                 except Exception:
-                    summary_text = "Untitled chat"
+                    summary_text = "- No summary available."
 
-                # Insert a new chat session
+                # Insert a new chat session (title + summary)
                 result = (
                     supabase.table("chat_sessions")
-                    .insert({"title": summary_text})
+                    .insert({"title": title_text, "summary": summary_text})
                     .execute()
                 )
 
@@ -802,5 +827,3 @@ with tabs[3]:
                 )
 
                 st.rerun()
-
-
