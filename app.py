@@ -73,17 +73,117 @@ div[data-testid="stButton"] > button.chat-btn {
 # --- Main content ---
 st.markdown("<h1>Dashboard</h1>", unsafe_allow_html=True)
 
-# --- Connect Supabase (silent connect, no banner) ---
+# ======================================================================
+# === SUPABASE CONNECTION (CACHED) =====================================
+# ======================================================================
+
+@st.cache_resource(show_spinner=False)
+def load_supabase():
+    return get_supabase()
+
 try:
-    supabase = get_supabase()
+    supabase = load_supabase()
 except Exception as e:
     st.error(f"⚠️ Supabase connection failed: {e}")
     supabase = None
 
-# --- Tabs ---
-tabs = st.tabs(["Search", "Contacts", "Saved Sets", "Chat"])
+# ======================================================================
+# === CACHED HELPERS (DB + EMBEDDINGS + CHAT SESSIONS) =================
+# ======================================================================
 
-# --- Cached AI summarization helper ---
+@st.cache_data(show_spinner=False)
+def get_total_leads_count() -> int:
+    """Cached total lead count, used in multiple places."""
+    if not supabase:
+        return 0
+    try:
+        total_response = (
+            supabase.table("leads")
+            .select("*", count="exact")
+            .limit(1)
+            .execute()
+        )
+        return getattr(total_response, "count", None) or 0
+    except Exception:
+        return 0
+
+
+@st.cache_data(show_spinner=False)
+def get_full_grid_page(page_index: int, per_page: int):
+    """Cached page of leads for the full grid (Search tab, no filters)."""
+    if not supabase:
+        return []
+    offset = page_index * per_page
+    try:
+        leads = (
+            supabase.table("leads")
+            .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
+            .order("full_name", desc=False)
+            .range(offset, offset + per_page - 1)
+            .execute()
+            .data
+            or []
+        )
+        return leads
+    except Exception:
+        return []
+
+
+@st.cache_data(show_spinner=False)
+def get_contacts_page(page_index: int, per_page: int):
+    """Cached page of leads for the Contacts tab table."""
+    if not supabase:
+        return []
+    offset = page_index * per_page
+    try:
+        leads = (
+            supabase.table("leads")
+            .select("full_name, email, tier, primary_role, city, country, notes")
+            .order("created_at", desc=True)
+            .range(offset, offset + per_page - 1)
+            .execute()
+            .data
+            or []
+        )
+        return leads
+    except Exception:
+        return []
+
+
+@st.cache_data(show_spinner=False)
+def load_chat_sessions():
+    """Cached list of chat sessions."""
+    if not supabase:
+        return []
+    try:
+        data = (
+            supabase.table("chat_sessions")
+            .select("*")
+            .order("id", desc=True)
+            .execute()
+            .data
+            or []
+        )
+        return data
+    except Exception:
+        return []
+
+
+@st.cache_data(show_spinner=False)
+def get_query_embedding_cached(query: str):
+    """Cached embedding for semantic search."""
+    key = os.getenv("OPENAI_API_KEY")
+    if not key:
+        raise ValueError("Missing OPENAI_API_KEY")
+    client = OpenAI(api_key=key)
+    embedding_model = "text-embedding-3-small"
+    return client.embeddings.create(
+        model=embedding_model,
+        input=query
+    ).data[0].embedding
+
+
+# --- Cached AI summarization helper (unchanged, already cached) ---
 @st.cache_data(show_spinner=False)
 def summarize_collector(lead_id: str, combined_notes: str) -> str:
     """
@@ -126,6 +226,9 @@ def summarize_collector(lead_id: str, combined_notes: str) -> str:
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"⚠️ OpenAI error: {e}"
+
+# --- Tabs ---
+tabs = st.tabs(["Search", "Contacts", "Saved Sets", "Chat"])
 
 # ======================================================================
 # === SEARCH TAB (CLEAN, GRID ALWAYS VISIBLE, NO COLORED ICONS) =========
@@ -182,13 +285,7 @@ with tabs[0]:
             # ------------------------------------------------------
             if semantic_query.strip():
                 try:
-                    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                    embedding_model = "text-embedding-3-small"
-
-                    emb = client.embeddings.create(
-                        model=embedding_model,
-                        input=semantic_query
-                    ).data[0].embedding
+                    emb = get_query_embedding_cached(semantic_query.strip())
 
                     rpc = supabase.rpc(
                         "rpc_semantic_search_leads_supplements",
@@ -246,7 +343,7 @@ with tabs[0]:
 
                     results = query.limit(2000).execute().data or []
 
-                except:
+                except Exception:
                     results = []
 
         st.session_state["search_results"] = results
@@ -261,29 +358,16 @@ with tabs[0]:
     # ======================================================================
     # === FULL GRID (NO SEARCH APPLIED)
     # ======================================================================
-    if not show_search_grid:
+    if not show_search_grid and supabase:
 
         per_page = 50
         if "full_grid_page" not in st.session_state:
             st.session_state.full_grid_page = 0
 
-        try:
-            total_response = supabase.table("leads").select("*", count="exact").limit(1).execute()
-            total_full = total_response.count or 0
-        except:
-            total_full = 0
-
+        total_full = get_total_leads_count()
         total_pages = max(1, (total_full + per_page - 1)//per_page)
-        offset = st.session_state.full_grid_page * per_page
 
-        leads = (
-            supabase.table("leads")
-            .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
-            .order("full_name", desc=False)
-            .range(offset, offset + per_page - 1)
-            .execute()
-            .data or []
-        )
+        leads = get_full_grid_page(st.session_state.full_grid_page, per_page)
 
         st.markdown("<div class='spacer'></div>", unsafe_allow_html=True)
         st.write(f"Showing {len(leads)} of {total_full} collectors")
@@ -380,8 +464,8 @@ NOTES:
     # ======================================================================
     # === SEARCH GRID (SEMANTIC & FILTER RESULTS)
     # ======================================================================
-    else:
-        results = search_results
+    elif show_search_grid:
+        results = search_results or []
         per_page = 50
 
         if "search_page" not in st.session_state:
@@ -521,6 +605,11 @@ with tabs[1]:
                             .execute()
                         )
                         if getattr(response, "status_code", 400) < 300:
+                            # Clear relevant caches so counts/pages update
+                            get_total_leads_count.clear()
+                            get_contacts_page.clear()
+                            get_full_grid_page.clear()
+
                             st.success(f"{full_name} has been added to your contacts.")
                             st.rerun()
                         else:
@@ -539,38 +628,13 @@ with tabs[1]:
         if "data_page" not in st.session_state:
             st.session_state.data_page = 0
 
-        offset = st.session_state.data_page * per_page
-
-        # --- Count total leads ---
-        try:
-            total_response = (
-                supabase.table("leads")
-                .select("*", count="exact")
-                .limit(1)
-                .execute()
-            )
-            total_count = getattr(total_response, "count", None) or 0
-        except Exception as e:
-            st.error(f"Could not fetch total lead count: {e}")
-            total_count = 0
-
+        # --- Count total leads (cached) ---
+        total_count = get_total_leads_count()
         total_pages = max(1, (total_count + per_page - 1) // per_page)
         st.caption(f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total leads")
 
-        # --- Fetch paginated leads ---
-        try:
-            leads = (
-                supabase.table("leads")
-                .select("full_name, email, tier, primary_role, city, country, notes")
-                .order("created_at", desc=True)
-                .range(offset, offset + per_page - 1)
-                .execute()
-                .data
-                or []
-            )
-        except Exception as e:
-            st.error(f"Failed to fetch leads: {e}")
-            leads = []
+        # --- Fetch paginated leads (cached) ---
+        leads = get_contacts_page(st.session_state.data_page, per_page)
 
         # --- Display leads in spreadsheet-style table (no lead_id column) ---
         if leads:
@@ -603,7 +667,6 @@ with tabs[1]:
         else:
             st.info("No leads found.")
 
-
 # ======================================================================
 # === SAVED SETS TAB ===
 # ======================================================================
@@ -627,7 +690,7 @@ with tabs[2]:
                 with st.expander(f"{s['name']}"):
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
-                    
+
 # ======================================================================
 # === CHAT TAB =========================================================
 # ======================================================================
@@ -645,14 +708,8 @@ with tabs[3]:
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # --- ALWAYS load chat sessions ---
-    st.session_state.chat_sessions = (
-        supabase.table("chat_sessions")
-        .select("*")
-        .order("id", desc=True)
-        .execute()
-        .data
-    )
+    # --- ALWAYS load chat sessions (cached) ---
+    st.session_state.chat_sessions = load_chat_sessions()
 
     # --- Init session state ---
     if "active_chat" not in st.session_state:
@@ -666,7 +723,6 @@ with tabs[3]:
 
     if "current_session_summary" not in st.session_state:
         st.session_state.current_session_summary = ""
-
 
     # --- Layout ---
     left, right = st.columns([2.4, 6.6], gap="large")
@@ -778,7 +834,7 @@ with tabs[3]:
                 )
 
                 # Save user msg to database
-                if st.session_state.current_chat_open:
+                if st.session_state.current_chat_open and supabase:
                     supabase.table("chat_messages").insert({
                         "session_id": st.session_state.current_chat_open,
                         "role": "user",
@@ -805,7 +861,7 @@ with tabs[3]:
                         )
 
                         # Save assistant response
-                        if st.session_state.current_chat_open:
+                        if st.session_state.current_chat_open and supabase:
                             supabase.table("chat_messages").insert({
                                 "session_id": st.session_state.current_chat_open,
                                 "role": "assistant",
@@ -842,7 +898,7 @@ with tabs[3]:
                         )
                         title_text = title_resp.choices[0].message.content.strip()
 
-                    except:
+                    except Exception:
                         title_text = "Untitled chat"
 
                     # SUMMARY
@@ -860,30 +916,27 @@ with tabs[3]:
                         )
                         summary_text = summary_resp.choices[0].message.content.strip()
 
-                    except:
+                    except Exception:
                         summary_text = "- No summary available."
 
                     # Save new session
-                    result = (
-                        supabase.table("chat_sessions")
-                        .insert({"title": title_text, "summary": summary_text})
-                        .execute()
-                    )
+                    if supabase:
+                        result = (
+                            supabase.table("chat_sessions")
+                            .insert({"title": title_text, "summary": summary_text})
+                            .execute()
+                        )
 
-                    new_session_id = result.data[0]["id"]
-                    st.session_state.current_chat_open = new_session_id
+                        # Clear cached sessions so new one appears
+                        load_chat_sessions.clear()
+
+                        new_session_id = result.data[0]["id"]
+                        st.session_state.current_chat_open = new_session_id
 
                     # Clear active chat
                     st.session_state.active_chat = []
 
                     # Refresh list
-                    st.session_state.chat_sessions = (
-                        supabase.table("chat_sessions")
-                        .select("*")
-                        .order("id", desc=True)
-                        .execute()
-                        .data
-                    )
+                    st.session_state.chat_sessions = load_chat_sessions()
 
                     st.rerun()
-
