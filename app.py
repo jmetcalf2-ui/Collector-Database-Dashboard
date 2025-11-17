@@ -5,16 +5,13 @@ import os
 from openai import OpenAI
 from datetime import datetime
 from pathlib import Path
-import pandas as pd  # For spreadsheet-style Contacts table
+import pandas as pd
 
-# --- Page setup ---
 st.set_page_config(page_title="Dashboard", layout="wide")
 inject_css()
 
-# --- Full-width but centered layout ---
 st.markdown("""
 <style>
-/* Left-align all buttons (chat history) */
 div[data-testid="stButton"] > button {
     text-align: left !important;
     justify-content: flex-start !important;
@@ -27,8 +24,6 @@ div[data-testid="stButton"] > button {
     color: #222 !important;
     white-space: pre-wrap !important;
 }
-
-/* Subtle hover effect */
 div[data-testid="stButton"] > button:hover {
     background-color: #f1f1f1 !important;
     border-color: #ccc !important;
@@ -36,11 +31,9 @@ div[data-testid="stButton"] > button:hover {
 </style>
 """, unsafe_allow_html=True)
 
-# --- Sidebar ---
 with st.sidebar:
     st.write(" ")
 
-# --- Initialize session state ---
 if "selected_leads" not in st.session_state:
     st.session_state.selected_leads = []
 if "chat_sessions" not in st.session_state:
@@ -48,7 +41,6 @@ if "chat_sessions" not in st.session_state:
 if "active_chat" not in st.session_state:
     st.session_state.active_chat = []
 
-# --- Global style ---
 st.markdown("""
 <style>
 div[data-testid="column"]:first-child {
@@ -70,12 +62,7 @@ div[data-testid="stButton"] > button.chat-btn {
 </style>
 """, unsafe_allow_html=True)
 
-# --- Main content ---
 st.markdown("<h1>Dashboard</h1>", unsafe_allow_html=True)
-
-# ======================================================================
-# === SUPABASE CONNECTION (CACHED) =====================================
-# ======================================================================
 
 @st.cache_resource(show_spinner=False)
 def load_supabase():
@@ -87,185 +74,137 @@ except Exception as e:
     st.error(f"⚠️ Supabase connection failed: {e}")
     supabase = None
 
-# ======================================================================
-# === CACHED HELPERS (DB + EMBEDDINGS + CHAT SESSIONS) =================
-# ======================================================================
-
 @st.cache_data(show_spinner=False)
-def get_total_leads_count() -> int:
-    """Cached total lead count, used in multiple places."""
+def get_total_leads_count():
     if not supabase:
         return 0
     try:
-        total_response = (
-            supabase.table("leads")
-            .select("*", count="exact")
-            .limit(1)
-            .execute()
-        )
-        return getattr(total_response, "count", None) or 0
-    except Exception:
+        res = supabase.table("leads").select("*", count="exact").limit(1).execute()
+        return getattr(res, "count", 0)
+    except:
         return 0
 
-
 @st.cache_data(show_spinner=False)
-def get_full_grid_page(page_index: int, per_page: int):
-    """Cached page of leads for the full grid (Search tab, no filters)."""
+def get_full_grid_page(page, per_page):
     if not supabase:
         return []
-    offset = page_index * per_page
+    offset = page * per_page
     try:
-        leads = (
+        res = (
             supabase.table("leads")
             .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
             .order("full_name", desc=False)
             .range(offset, offset + per_page - 1)
             .execute()
-            .data
-            or []
         )
-        return leads
-    except Exception:
+        return res.data or []
+    except:
         return []
-
 
 @st.cache_data(show_spinner=False)
-def get_contacts_page(page_index: int, per_page: int):
-    """Cached page of leads for the Contacts tab table."""
+def get_contacts_page(page, per_page):
     if not supabase:
         return []
-    offset = page_index * per_page
+    offset = page * per_page
     try:
-        leads = (
+        res = (
             supabase.table("leads")
             .select("full_name, email, tier, primary_role, city, country, notes")
             .order("created_at", desc=True)
             .range(offset, offset + per_page - 1)
             .execute()
-            .data
-            or []
         )
-        return leads
-    except Exception:
+        return res.data or []
+    except:
         return []
-
 
 @st.cache_data(show_spinner=False)
 def load_chat_sessions():
-    """Cached list of chat sessions."""
     if not supabase:
         return []
     try:
-        data = (
+        res = (
             supabase.table("chat_sessions")
             .select("*")
             .order("id", desc=True)
             .execute()
-            .data
-            or []
         )
-        return data
-    except Exception:
+        return res.data or []
+    except:
         return []
 
-
 @st.cache_data(show_spinner=False)
-def get_query_embedding_cached(query: str):
-    """Cached embedding for semantic search."""
+def get_query_embedding_cached(query):
     key = os.getenv("OPENAI_API_KEY")
     if not key:
-        raise ValueError("Missing OPENAI_API_KEY")
+        raise ValueError("Missing key")
     client = OpenAI(api_key=key)
-    embedding_model = "text-embedding-3-small"
-    return client.embeddings.create(
-        model=embedding_model,
+    emb = client.embeddings.create(
+        model="text-embedding-3-small",
         input=query
     ).data[0].embedding
+    return emb
 
-
-# --- Cached AI summarization helper (unchanged, already cached) ---
 @st.cache_data(show_spinner=False)
-def summarize_collector(lead_id: str, combined_notes: str) -> str:
-    """
-    Summarizes collector intelligence notes into bullet points using OpenAI.
-    Prints debug info if key or data missing.
-    """
+def summarize_collector(lead_id, combined_notes):
     key = os.getenv("OPENAI_API_KEY")
     if not key:
-        return "⚠️ Missing OPENAI_API_KEY — add it to your environment."
-
+        return "⚠️ Missing OPENAI_API_KEY"
     if not combined_notes.strip():
-        return "⚠️ No notes found for this lead."
+        return "⚠️ No notes found"
 
     try:
         client = OpenAI(api_key=key)
         prompt = f"""
-        You are an expert art-market researcher creating collector intelligence summaries.
-        Write 4–6 short bullet points summarizing this collector's data factually.
-        Focus on specifics like:
-        - Artists collected or recently purchased
-        - Museum/institutional boards or affiliations
-        - Geography (city or region)
-        - Collecting tendencies or philanthropy
-        - Notable sales, acquisitions, or foundations
-        Avoid adjectives like 'important' or 'renowned'.
-        Example: 'Collects Glenn Ligon and Kara Walker; MoMA trustee; founded Art for Justice Fund.'
+Summarize collector notes into 4–6 bullet points.
+Avoid adjectives. Focus on concrete data.
 
-        NOTES:
-        {combined_notes}
-        """
-        response = client.chat.completions.create(
+NOTES:
+{combined_notes}
+"""
+        res = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "Summarize art collectors factually and concisely."},
-                {"role": "user", "content": prompt},
+                {"role": "system", "content": "Summarize collectors factually."},
+                {"role": "user", "content": prompt}
             ],
             temperature=0.3,
-            max_tokens=500,
+            max_tokens=400
         )
-        return response.choices[0].message.content.strip()
+        return res.choices[0].message.content.strip()
     except Exception as e:
         return f"⚠️ OpenAI error: {e}"
 
-# --- Tabs ---
 tabs = st.tabs(["Search", "Contacts", "Saved Sets", "Chat"])
 
-# ======================================================================
-# === SEARCH TAB (CLEAN, GRID ALWAYS VISIBLE, NO COLORED ICONS) =========
-# ======================================================================
+# ========================
+# SEARCH TAB
+# ========================
 with tabs[0]:
     st.markdown("## Search")
 
-    # --- Clean input style ---
     st.markdown("""
     <style>
-        input[data-testid="stTextInput"]::placeholder {
-            color:#999 !important;
-        }
-        .spacer { margin-top: 20px; }
+    input[data-testid="stTextInput"]::placeholder {
+        color:#999 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-    # --- SEARCH INPUT FIELDS ---
     col1, col2, col3, col4, col5 = st.columns([2.2,1.2,1.2,1.2,1.2])
-
     with col1:
-        keyword = st.text_input("Keyword", placeholder="Name, email, interests, etc.")
+        keyword = st.text_input("Keyword")
     with col2:
         city = st.text_input("City")
     with col3:
         country = st.text_input("Country")
     with col4:
-        tier = st.selectbox("Tier", ["", "A", "B", "C"], index=0)
+        tier = st.selectbox("Tier", ["", "A", "B", "C"])
     with col5:
         role = st.text_input("Primary Role")
 
-    semantic_query = st.text_input(
-        "Semantic Search",
-        placeholder="e.g. Minimalism collectors or those following Bruce Nauman"
-    )
+    semantic_query = st.text_input("Semantic Search")
 
-    # Auto-clear search when empty
     if (
         keyword.strip()=="" and city.strip()=="" and country.strip()=="" and
         (tier=="" or tier is None) and role.strip()=="" and
@@ -274,19 +213,12 @@ with tabs[0]:
         st.session_state["search_results"] = None
         st.session_state["search_page"] = 0
 
-    # ============================================================
-    # RUN SEARCH
-    # ============================================================
     if st.button("Search Leads") and supabase:
         with st.spinner("Searching..."):
 
-            # ------------------------------------------------------
-            # SEMANTIC SEARCH
-            # ------------------------------------------------------
             if semantic_query.strip():
                 try:
                     emb = get_query_embedding_cached(semantic_query.strip())
-
                     rpc = supabase.rpc(
                         "rpc_semantic_search_leads_supplements",
                         {
@@ -295,99 +227,82 @@ with tabs[0]:
                             "min_score": 0.10
                         }
                     ).execute()
-
-                    rpc_rows = rpc.data or []
-
-                    # Fetch full lead rows
-                    lead_ids = [r.get("lead_id") for r in rpc_rows if r.get("lead_id")]
-
-                    merged_results = []
-                    if lead_ids:
-                        full_rows = (
+                    rows = rpc.data or []
+                    ids = [r["lead_id"] for r in rows if r.get("lead_id")]
+                    if ids:
+                        res = (
                             supabase.table("leads")
                             .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
-                            .in_("lead_id", lead_ids)
+                            .in_("lead_id", ids)
                             .execute()
-                            .data or []
                         )
-                        merged_results = full_rows
-
-                    results = merged_results
-
+                        st.session_state["search_results"] = res.data or []
+                    else:
+                        st.session_state["search_results"] = []
                 except Exception as e:
                     st.error(f"Semantic search error: {e}")
-                    results = []
+                    st.session_state["search_results"] = []
 
-            # ------------------------------------------------------
-            # REGULAR SEARCH
-            # ------------------------------------------------------
             else:
                 try:
-                    query = supabase.table("leads").select(
+                    q = supabase.table("leads").select(
                         "lead_id, full_name, email, tier, primary_role, city, country, notes"
                     )
-
                     if keyword:
-                        q = f"%{keyword}%"
-                        query = query.or_(
-                            f"full_name.ilike.{q},email.ilike.{q},primary_role.ilike.{q}"
-                        )
+                        w = f"%{keyword}%"
+                        q = q.or_(f"full_name.ilike.{w},email.ilike.{w},primary_role.ilike.{w}")
                     if city:
-                        query = query.ilike("city", f"%{city}%")
+                        q = q.ilike("city", f"%{city}%")
                     if country:
-                        query = query.ilike("country", f"%{country}%")
+                        q = q.ilike("country", f"%{country}%")
                     if tier:
-                        query = query.eq("tier", tier)
+                        q = q.eq("tier", tier)
                     if role:
-                        query = query.ilike("primary_role", f"%{role}%")
+                        q = q.ilike("primary_role", f"%{role}%")
 
-                    results = query.limit(2000).execute().data or []
+                    res = q.limit(2000).execute()
+                    st.session_state["search_results"] = res.data or []
+                except:
+                    st.session_state["search_results"] = []
 
-                except Exception:
-                    results = []
-
-        st.session_state["search_results"] = results
         st.session_state["search_page"] = 0
 
-    # ============================================================
-    # DETERMINE WHICH GRID TO SHOW
-    # ============================================================
+    # ==========================================
+    # SHOW SEARCH OR FULL GRID
+    # ==========================================
     search_results = st.session_state.get("search_results", None)
     show_search_grid = search_results is not None
 
-    # ======================================================================
-    # === FULL GRID (NO SEARCH APPLIED)
-    # ======================================================================
+    # ------------------------------
+    # FULL GRID (NO SEARCH APPLIED)
+    # ------------------------------
     if not show_search_grid and supabase:
-
         per_page = 50
         if "full_grid_page" not in st.session_state:
             st.session_state.full_grid_page = 0
 
         total_full = get_total_leads_count()
-        total_pages = max(1, (total_full + per_page - 1)//per_page)
+        total_pages = max(1, (total_full + per_page - 1) // per_page)
 
         leads = get_full_grid_page(st.session_state.full_grid_page, per_page)
 
-        st.markdown("<div class='spacer'></div>", unsafe_allow_html=True)
         st.write(f"Showing {len(leads)} of {total_full} collectors")
 
-        left, right = st.columns(2)
+        left_col, right_col = st.columns(2)
 
         for i, lead in enumerate(leads):
-            col = left if i % 2 == 0 else right
+            col = left_col if i % 2 == 0 else right_col
 
-            name = lead.get("full_name","Unnamed")
+            name = lead.get("full_name", "Unnamed")
             city_val = (lead.get("city") or "").strip()
             label = f"{name} — {city_val}" if city_val else name
             lead_id = str(lead.get("lead_id"))
 
             with col:
                 with st.expander(label):
-
-                    tier_val = lead.get("tier","—")
-                    role_val = lead.get("primary_role","—")
-                    email_val = lead.get("email","—")
+                    tier_val = lead.get("tier", "—")
+                    role_val = lead.get("primary_role", "—")
+                    email_val = lead.get("email", "—")
                     country_val = (lead.get("country") or "").strip()
 
                     if city_val or country_val:
@@ -395,21 +310,20 @@ with tabs[0]:
                     st.caption(f"{role_val} | Tier {tier_val}")
                     st.write(email_val)
 
-                    # -------- Summarize Button (FULL GRID) --------
-                    sum_col, _ = st.columns([3,1])
+                    sum_col, _ = st.columns([3, 1])
                     summary_key = f"summary_{lead_id}"
 
                     with sum_col:
                         if summary_key not in st.session_state:
                             if st.button(f"Summarize {name}", key=f"sum_full_{lead_id}"):
                                 with st.spinner("Summarizing notes..."):
-
                                     supplements = (
                                         supabase.table("leads_supplements")
                                         .select("notes")
                                         .eq("lead_id", lead_id)
                                         .execute()
-                                        .data or []
+                                        .data
+                                        or []
                                     )
 
                                     base_notes = lead.get("notes") or ""
@@ -419,9 +333,9 @@ with tabs[0]:
                                     )
 
                                     combined = (
-                                        base_notes +
-                                        ("\n\n" if base_notes and supplement_notes else "") +
-                                        supplement_notes
+                                        base_notes
+                                        + ("\n\n" if base_notes and supplement_notes else "")
+                                        + supplement_notes
                                     ).strip()
 
                                     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -437,33 +351,37 @@ NOTES:
                                     resp = client.chat.completions.create(
                                         model="gpt-4o-mini",
                                         messages=[
-                                            {"role": "system", "content":"You summarize art collectors factually."},
+                                            {"role": "system", "content": "You summarize art collectors factually."},
                                             {"role": "user", "content": prompt},
                                         ],
                                         temperature=0.2,
-                                        max_tokens=500
+                                        max_tokens=500,
                                     )
 
-                                    st.session_state[summary_key] = resp.choices[0].message.content.strip()
+                                    st.session_state[summary_key] = (
+                                        resp.choices[0].message.content.strip()
+                                    )
                                     st.rerun()
                         else:
                             st.markdown("**Summary:**")
                             st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
 
-        # Pagination
-        col_space_left, prev_col, next_col, col_space_right = st.columns([2,1,1,2])
+        col_space_left, prev_col, next_col, col_space_right = st.columns([2, 1, 1, 2])
         with prev_col:
-            if st.button("Prev Page", disabled=st.session_state.full_grid_page==0):
+            if st.button("Prev Page", disabled=st.session_state.full_grid_page == 0):
                 st.session_state.full_grid_page -= 1
                 st.rerun()
         with next_col:
-            if st.button("Next Page", disabled=st.session_state.full_grid_page>=total_pages-1):
+            if st.button(
+                "Next Page",
+                disabled=st.session_state.full_grid_page >= total_pages - 1,
+            ):
                 st.session_state.full_grid_page += 1
                 st.rerun()
 
-    # ======================================================================
-    # === SEARCH GRID (SEMANTIC & FILTER RESULTS)
-    # ======================================================================
+    # ------------------------------
+    # SEARCH GRID (HAS RESULTS)
+    # ------------------------------
     elif show_search_grid:
         results = search_results or []
         per_page = 50
@@ -472,46 +390,44 @@ NOTES:
             st.session_state.search_page = 0
 
         total_results = len(results)
-        total_pages = max(1, (total_results + per_page - 1)//per_page)
+        total_pages = max(1, (total_results + per_page - 1) // per_page)
 
         start = st.session_state.search_page * per_page
         end = start + per_page
         page_results = results[start:end]
 
-        st.markdown("<div class='spacer'></div>", unsafe_allow_html=True)
         st.write(f"Showing {len(page_results)} of {total_results} results")
 
-        left, right = st.columns(2)
+        left_col, right_col = st.columns(2)
 
         for i, lead in enumerate(page_results):
-            col = left if i % 2 == 0 else right
+            col = left_col if i % 2 == 0 else right_col
             lead_id = str(lead.get("lead_id"))
 
-            name = lead.get("full_name","Unnamed")
+            name = lead.get("full_name", "Unnamed")
             city_val = (lead.get("city") or "").strip()
             label = f"{name} — {city_val}" if city_val else name
 
             with col:
                 with st.expander(label):
                     st.markdown(f"**{name}**")
-                    st.caption(f"{lead.get('primary_role','—')} | Tier {lead.get('tier','—')}")
-                    st.write(lead.get("email","—"))
+                    st.caption(f"{lead.get('primary_role', '—')} | Tier {lead.get('tier', '—')}")
+                    st.write(lead.get("email", "—"))
 
-                    # -------- Summarize Button (SEARCH GRID) --------
-                    sum_col, _ = st.columns([3,1])
+                    sum_col, _ = st.columns([3, 1])
                     summary_key = f"summary_{lead_id}"
 
                     with sum_col:
                         if summary_key not in st.session_state:
                             if st.button(f"Summarize {name}", key=f"sum_search_{lead_id}"):
                                 with st.spinner("Summarizing notes..."):
-
                                     supplements = (
                                         supabase.table("leads_supplements")
                                         .select("notes")
                                         .eq("lead_id", lead_id)
                                         .execute()
-                                        .data or []
+                                        .data
+                                        or []
                                     )
 
                                     base_notes = lead.get("notes") or ""
@@ -521,9 +437,9 @@ NOTES:
                                     )
 
                                     combined = (
-                                        base_notes +
-                                        ("\n\n" if base_notes and supplement_notes else "") +
-                                        supplement_notes
+                                        base_notes
+                                        + ("\n\n" if base_notes and supplement_notes else "")
+                                        + supplement_notes
                                     ).strip()
 
                                     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -539,34 +455,37 @@ NOTES:
                                     resp = client.chat.completions.create(
                                         model="gpt-4o-mini",
                                         messages=[
-                                            {"role": "system", "content":"You summarize art collectors factually."},
+                                            {"role": "system", "content": "You summarize art collectors factually."},
                                             {"role": "user", "content": prompt},
                                         ],
                                         temperature=0.2,
-                                        max_tokens=500
+                                        max_tokens=500,
                                     )
 
-                                    st.session_state[summary_key] = resp.choices[0].message.content.strip()
+                                    st.session_state[summary_key] = (
+                                        resp.choices[0].message.content.strip()
+                                    )
                                     st.rerun()
-
                         else:
                             st.markdown("**Summary:**")
                             st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
 
-        # Pagination
-        prev_col, next_col = st.columns([1,1])
+        prev_col, next_col = st.columns([1, 1])
         with prev_col:
-            if st.button("Prev Results", disabled=st.session_state.search_page==0):
+            if st.button("Prev Results", disabled=st.session_state.search_page == 0):
                 st.session_state.search_page -= 1
                 st.rerun()
         with next_col:
-            if st.button("Next Results", disabled=st.session_state.search_page>=total_pages-1):
+            if st.button(
+                "Next Results",
+                disabled=st.session_state.search_page >= total_pages - 1,
+            ):
                 st.session_state.search_page += 1
                 st.rerun()
 
-# ======================================================================
-# === CONTACTS TAB ===
-# ======================================================================
+# ============================================================
+# CONTACTS TAB
+# ============================================================
 with tabs[1]:
     st.markdown("## Contacts")
 
@@ -575,7 +494,6 @@ with tabs[1]:
         with st.form("create_contact_form"):
             st.markdown("Enter contact details to add a new record to the leads table:")
 
-            # Core lead fields — adjust to your Supabase schema
             full_name = st.text_input("Full Name")
             email = st.text_input("Email")
             primary_role = st.text_input("Primary Role")
@@ -584,7 +502,6 @@ with tabs[1]:
             tier = st.selectbox("Tier", ["A", "B", "C", "—"], index=3)
             notes = st.text_area("Notes", height=100)
 
-            # Submit
             submitted = st.form_submit_button("Create Contact")
             if submitted:
                 if not full_name or not email:
@@ -593,23 +510,25 @@ with tabs[1]:
                     try:
                         response = (
                             supabase.table("leads")
-                            .insert({
-                                "full_name": full_name.strip(),
-                                "email": email.strip(),
-                                "primary_role": primary_role.strip() if primary_role else None,
-                                "city": city.strip() if city else None,
-                                "country": country.strip() if country else None,
-                                "tier": None if tier == "—" else tier,
-                                "notes": notes.strip() if notes else None,
-                            })
+                            .insert(
+                                {
+                                    "full_name": full_name.strip(),
+                                    "email": email.strip(),
+                                    "primary_role": primary_role.strip()
+                                    if primary_role
+                                    else None,
+                                    "city": city.strip() if city else None,
+                                    "country": country.strip() if country else None,
+                                    "tier": None if tier == "—" else tier,
+                                    "notes": notes.strip() if notes else None,
+                                }
+                            )
                             .execute()
                         )
                         if getattr(response, "status_code", 400) < 300:
-                            # Clear relevant caches so counts/pages update
                             get_total_leads_count.clear()
                             get_contacts_page.clear()
                             get_full_grid_page.clear()
-
                             st.success(f"{full_name} has been added to your contacts.")
                             st.rerun()
                         else:
@@ -617,45 +536,99 @@ with tabs[1]:
                     except Exception as e:
                         st.error(f"Error creating contact: {e}")
 
-    # --- Small spacing before table ---
+    # --- Spacing before filter + table ---
     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
     if not supabase:
         st.warning("Database unavailable.")
     else:
-        # --- Pagination setup for spreadsheet view ---
-        per_page = 200  # 200 entries per page as requested
+        # --------------------------
+        # Filter + Export controls
+        # --------------------------
+        st.markdown("### Filter Contacts")
+
+        filter_text = st.text_input(
+            "Search contacts by any visible field",
+            placeholder="e.g. Nauman, Minimalism, France, curator…",
+            key="contacts_filter_text",
+        )
+
+        export_btn = st.button("Export Filtered Results as CSV", key="contacts_export_btn")
+
+        def filter_dataframe(df: pd.DataFrame, text: str) -> pd.DataFrame:
+            if not text or not text.strip():
+                return df
+            text = text.lower()
+            return df[
+                df.apply(
+                    lambda row: any(
+                        text in str(row[col]).lower() for col in df.columns
+                    ),
+                    axis=1,
+                )
+            ]
+
+        # --------------------------
+        # Pagination + data fetch
+        # --------------------------
+        per_page = 200
         if "data_page" not in st.session_state:
             st.session_state.data_page = 0
 
-        # --- Count total leads (cached) ---
         total_count = get_total_leads_count()
         total_pages = max(1, (total_count + per_page - 1) // per_page)
-        st.caption(f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total leads")
+        st.caption(
+            f"Page {st.session_state.data_page + 1} of {total_pages} — {total_count} total leads"
+        )
 
-        # --- Fetch paginated leads (cached) ---
         leads = get_contacts_page(st.session_state.data_page, per_page)
 
-        # --- Display leads in spreadsheet-style table (no lead_id column) ---
         if leads:
             df = pd.DataFrame(leads)
-
-            # Reorder columns to something sensible
-            desired_cols = ["full_name", "email", "tier", "primary_role", "city", "country", "notes"]
+            desired_cols = [
+                "full_name",
+                "email",
+                "tier",
+                "primary_role",
+                "city",
+                "country",
+                "notes",
+            ]
             existing_cols = [c for c in desired_cols if c in df.columns]
             df = df[existing_cols]
 
-            st.dataframe(df, use_container_width=True)
+            # Apply filter
+            filtered_df = filter_dataframe(df, filter_text)
 
-            # --- Pagination controls ---
+            # Show table
+            st.dataframe(filtered_df, use_container_width=True)
+
+            # Export CSV for filtered rows
+            if export_btn:
+                if not filtered_df.empty:
+                    csv_bytes = filtered_df.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        "Download filtered contacts as CSV",
+                        data=csv_bytes,
+                        file_name="filtered_contacts.csv",
+                        mime="text/csv",
+                    )
+                else:
+                    st.warning("No rows to export for this filter.")
+
+            # Pagination controls
             st.markdown("---")
-            col_space_left, col_prev, col_next, col_space_right = st.columns([2, 1, 1, 2])
-
+            col_space_left, col_prev, col_next, col_space_right = st.columns(
+                [2, 1, 1, 2]
+            )
             with col_prev:
-                if st.button("Previous", use_container_width=True, disabled=st.session_state.data_page == 0):
+                if st.button(
+                    "Previous",
+                    use_container_width=True,
+                    disabled=st.session_state.data_page == 0,
+                ):
                     st.session_state.data_page -= 1
                     st.rerun()
-
             with col_next:
                 if st.button(
                     "Next",
@@ -667,9 +640,9 @@ with tabs[1]:
         else:
             st.info("No leads found.")
 
-# ======================================================================
-# === SAVED SETS TAB ===
-# ======================================================================
+# ============================================================
+# SAVED SETS TAB
+# ============================================================
 with tabs[2]:
     st.markdown("## Saved Sets")
     if not supabase:
@@ -691,12 +664,10 @@ with tabs[2]:
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
 
-# ======================================================================
-# === CHAT TAB =========================================================
-# ======================================================================
+# ============================================================
+# CHAT TAB
+# ============================================================
 with tabs[3]:
-
-    # --- System prompt setup ---
     system_prompt_path = Path("prompts/system_prompt.md")
     if system_prompt_path.exists():
         system_prompt = system_prompt_path.read_text().strip()
@@ -708,37 +679,26 @@ with tabs[3]:
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # --- ALWAYS load chat sessions (cached) ---
     st.session_state.chat_sessions = load_chat_sessions()
 
-    # --- Init session state ---
     if "active_chat" not in st.session_state:
         st.session_state.active_chat = []
-
     if "current_chat_open" not in st.session_state:
         st.session_state.current_chat_open = None
-
     if "current_session_title" not in st.session_state:
         st.session_state.current_session_title = ""
-
     if "current_session_summary" not in st.session_state:
         st.session_state.current_session_summary = ""
 
-    # --- Layout ---
     left, right = st.columns([2.4, 6.6], gap="large")
 
-    # ======================================================================
-    # === LEFT COLUMN: CHAT LIST ===========================================
-    # ======================================================================
     with left:
         st.markdown("### Chats")
 
         if not st.session_state.chat_sessions:
             st.info("No previous chats yet.")
         else:
-
             for i, session in enumerate(st.session_state.chat_sessions):
-
                 title = session.get("title", "Untitled chat")
                 summary = session.get("summary", "")
                 session_id = session["id"]
@@ -747,11 +707,10 @@ with tabs[3]:
                     title,
                     key=f"chat_btn_{i}",
                     use_container_width=True,
-                    type="secondary"
+                    type="secondary",
                 )
 
                 if clicked:
-                    # Toggle
                     if st.session_state.current_chat_open == session_id:
                         st.session_state.current_chat_open = None
                         st.session_state.current_session_summary = ""
@@ -760,31 +719,16 @@ with tabs[3]:
                         st.session_state.current_chat_open = session_id
                         st.session_state.current_session_summary = summary
                         st.session_state.current_session_title = title
-                        st.session_state.active_chat = []  # hide chat bubbles
-
+                        st.session_state.active_chat = []
                     st.rerun()
 
-    # ======================================================================
-    # === RIGHT COLUMN: CURRENT CHAT / SUMMARY =============================
-    # ======================================================================
     with right:
-
-        # --------------------------------------------------------------
-        # CASE 1 — Summary mode (previous chat selected)
-        # --------------------------------------------------------------
         if st.session_state.current_chat_open is not None:
-
             st.markdown(f"### {st.session_state.current_session_title}")
-
             st.markdown(st.session_state.current_session_summary)
-
-        # --------------------------------------------------------------
-        # CASE 2 — ACTIVE chat mode (no summary open)
-        # --------------------------------------------------------------
         else:
             st.markdown("### Current Chat")
 
-            # Render chat bubbles
             for msg in st.session_state.active_chat:
                 if msg["role"] == "user":
                     st.markdown(
@@ -823,25 +767,22 @@ with tabs[3]:
 
             st.markdown("<div style='clear:both;'></div>", unsafe_allow_html=True)
 
-            # --- Chat input ---
             user_input = st.chat_input("Ask about collectors, regions, or interests...")
 
             if user_input:
-
-                # Update UI
                 st.session_state.active_chat.append(
                     {"role": "user", "content": user_input}
                 )
 
-                # Save user msg to database
                 if st.session_state.current_chat_open and supabase:
-                    supabase.table("chat_messages").insert({
-                        "session_id": st.session_state.current_chat_open,
-                        "role": "user",
-                        "content": user_input,
-                    }).execute()
+                    supabase.table("chat_messages").insert(
+                        {
+                            "session_id": st.session_state.current_chat_open,
+                            "role": "user",
+                            "content": user_input,
+                        }
+                    ).execute()
 
-                # LLM response
                 with st.spinner("Thinking..."):
                     try:
                         messages = [{"role": "system", "content": system_prompt}]
@@ -860,31 +801,31 @@ with tabs[3]:
                             {"role": "assistant", "content": response_text}
                         )
 
-                        # Save assistant response
                         if st.session_state.current_chat_open and supabase:
-                            supabase.table("chat_messages").insert({
-                                "session_id": st.session_state.current_chat_open,
-                                "role": "assistant",
-                                "content": response_text,
-                            }).execute()
+                            supabase.table("chat_messages").insert(
+                                {
+                                    "session_id": st.session_state.current_chat_open,
+                                    "role": "assistant",
+                                    "content": response_text,
+                                }
+                            ).execute()
 
                         st.rerun()
-
                     except Exception as e:
                         st.error(f"Chat failed: {e}")
 
-            # --- New Chat Button ---
             if st.session_state.active_chat:
                 st.divider()
 
                 if st.button("New Chat", use_container_width=True):
-
-                    # Gather user text
                     preview_text = " ".join(
-                        [m["content"] for m in st.session_state.active_chat if m["role"] == "user"]
+                        [
+                            m["content"]
+                            for m in st.session_state.active_chat
+                            if m["role"] == "user"
+                        ]
                     )[:2000]
 
-                    # TITLE
                     try:
                         title_prompt = (
                             "Summarize the conversation topic in 3–5 plain words.\n"
@@ -897,11 +838,9 @@ with tabs[3]:
                             max_tokens=15,
                         )
                         title_text = title_resp.choices[0].message.content.strip()
-
                     except Exception:
                         title_text = "Untitled chat"
 
-                    # SUMMARY
                     try:
                         summary_prompt = (
                             "Write a clean bullet-point summary of the user's conversation.\n"
@@ -915,11 +854,9 @@ with tabs[3]:
                             max_tokens=200,
                         )
                         summary_text = summary_resp.choices[0].message.content.strip()
-
                     except Exception:
                         summary_text = "- No summary available."
 
-                    # Save new session
                     if supabase:
                         result = (
                             supabase.table("chat_sessions")
@@ -927,16 +864,12 @@ with tabs[3]:
                             .execute()
                         )
 
-                        # Clear cached sessions so new one appears
                         load_chat_sessions.clear()
 
                         new_session_id = result.data[0]["id"]
                         st.session_state.current_chat_open = new_session_id
 
-                    # Clear active chat
                     st.session_state.active_chat = []
-
-                    # Refresh list
                     st.session_state.chat_sessions = load_chat_sessions()
-
                     st.rerun()
+
