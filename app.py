@@ -556,215 +556,118 @@ NOTES:
                 st.rerun()
 
     # ------------------------------
-    # CHAT WITH COLLECTORGPT
+    # Inline CollectorGPT bar (no labels)
     # ------------------------------
-    st.markdown("---")
-    st.markdown("## Ask CollectorGPT")
-
-    system_prompt_path = Path("prompts/system_prompt.md")
-    if system_prompt_path.exists():
-        system_prompt = system_prompt_path.read_text().strip()
-    else:
-        system_prompt = (
-            "You are CollectorGPT — a helpful art-market assistant. "
-            "Keep responses factual, concise, and well-reasoned."
-        )
-
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         st.warning("Set OPENAI_API_KEY to chat with CollectorGPT.")
     else:
+        system_prompt_path = Path("prompts/system_prompt.md")
+        if system_prompt_path.exists():
+            system_prompt = system_prompt_path.read_text().strip()
+        else:
+            system_prompt = (
+                "You are CollectorGPT — a helpful art-market assistant. "
+                "Keep responses factual, concise, and well-reasoned."
+            )
+
         client = OpenAI(api_key=api_key)
 
-        st.session_state.chat_sessions = load_chat_sessions()
+        if st.session_state.current_chat_open and supabase:
+            st.session_state.chat_sessions = load_chat_sessions()
 
-        left, right = st.columns([2.4, 6.6], gap="large")
-
-        with left:
-            st.markdown("### Chats")
-
-            if not st.session_state.chat_sessions:
-                st.info("No previous chats yet.")
+        for msg in st.session_state.active_chat:
+            if msg["role"] == "user":
+                st.markdown(
+                    f"""
+                    <div style="
+                        background-color:#f5f5f5;
+                        padding:10px 14px;
+                        border-radius:12px;
+                        margin:6px 0;
+                        text-align:right;
+                        max-width:75%;
+                        float:right;
+                        clear:both;">
+                        {msg["content"]}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
             else:
-                for i, session in enumerate(st.session_state.chat_sessions):
-                    title = session.get("title", "Untitled chat")
-                    summary = session.get("summary", "")
-                    session_id = session["id"]
-
-                    clicked = st.button(
-                        title,
-                        key=f"chat_btn_{i}",
-                        use_container_width=True,
-                        type="secondary",
-                    )
-
-                    if clicked:
-                        if st.session_state.current_chat_open == session_id:
-                            st.session_state.current_chat_open = None
-                            st.session_state.current_session_summary = ""
-                            st.session_state.current_session_title = ""
-                        else:
-                            st.session_state.current_chat_open = session_id
-                            st.session_state.current_session_summary = summary
-                            st.session_state.current_session_title = title
-                            st.session_state.active_chat = []
-                        st.rerun()
-
-        with right:
-            st.markdown("### CollectorGPT")
-            if st.session_state.current_chat_open is not None:
-                st.caption("Continuing a saved chat")
-                st.markdown(f"**{st.session_state.current_session_title}**")
-                st.markdown(st.session_state.current_session_summary)
-                if st.button("Close saved chat view"):
-                    st.session_state.current_chat_open = None
-                    st.session_state.current_session_summary = ""
-                    st.session_state.current_session_title = ""
-                    st.rerun()
-
-            for msg in st.session_state.active_chat:
-                if msg["role"] == "user":
-                    st.markdown(
-                        f"""
-                        <div style="
-                            background-color:#f5f5f5;
-                            padding:10px 14px;
-                            border-radius:12px;
-                            margin:6px 0;
-                            text-align:right;
-                            max-width:75%;
-                            float:right;
-                            clear:both;">
-                            {msg["content"]}
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.markdown(
-                        f"""
-                        <div style="
-                            background-color:#ffffff;
-                            padding:10px 14px;
-                            border-radius:12px;
-                            margin:6px 0;
-                            text-align:left;
-                            max-width:75%;
-                            float:left;
-                            clear:both;">
-                            {msg["content"]}
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-            st.markdown("<div style='clear:both;'></div>", unsafe_allow_html=True)
-
-            user_input = st.chat_input("Ask about collectors, regions, or interests...")
-
-            if user_input:
-                st.session_state.active_chat.append(
-                    {"role": "user", "content": user_input}
+                st.markdown(
+                    f"""
+                    <div style="
+                        background-color:#ffffff;
+                        padding:10px 14px;
+                        border-radius:12px;
+                        margin:6px 0;
+                        text-align:left;
+                        max-width:75%;
+                        float:left;
+                        clear:both;">
+                        {msg["content"]}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
                 )
 
-                if st.session_state.current_chat_open and supabase:
-                    supabase.table("chat_messages").insert(
-                        {
-                            "session_id": st.session_state.current_chat_open,
-                            "role": "user",
-                            "content": user_input,
-                        }
-                    ).execute()
+        st.markdown("<div style='clear:both;'></div>", unsafe_allow_html=True)
 
-                with st.spinner("Thinking..."):
-                    try:
-                        messages = [{"role": "system", "content": system_prompt}]
-                        messages.extend(st.session_state.active_chat)
+        user_input = st.chat_input(placeholder="Ask CollectorGPT about collectors, regions, or interests...", key="collector_chat_bar")
 
-                        completion = client.chat.completions.create(
-                            model="gpt-4o-mini",
-                            messages=messages,
-                            temperature=0.5,
-                            max_tokens=600,
-                        )
+        if user_input:
+            st.session_state.active_chat.append(
+                {"role": "user", "content": user_input}
+            )
 
-                        response_text = completion.choices[0].message.content.strip()
+            if st.session_state.current_chat_open and supabase:
+                supabase.table("chat_messages").insert(
+                    {
+                        "session_id": st.session_state.current_chat_open,
+                        "role": "user",
+                        "content": user_input,
+                    }
+                ).execute()
 
-                        st.session_state.active_chat.append(
-                            {"role": "assistant", "content": response_text}
-                        )
+            with st.spinner("Thinking..."):
+                try:
+                    messages = [{"role": "system", "content": system_prompt}]
+                    messages.extend(st.session_state.active_chat)
 
-                        if st.session_state.current_chat_open and supabase:
-                            supabase.table("chat_messages").insert(
-                                {
-                                    "session_id": st.session_state.current_chat_open,
-                                    "role": "assistant",
-                                    "content": response_text,
-                                }
-                            ).execute()
+                    completion = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=messages,
+                        temperature=0.5,
+                        max_tokens=600,
+                    )
 
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Chat failed: {e}")
+                    response_text = completion.choices[0].message.content.strip()
 
-            if st.session_state.active_chat:
-                st.divider()
+                    st.session_state.active_chat.append(
+                        {"role": "assistant", "content": response_text}
+                    )
 
-                if st.button("New Chat", use_container_width=True):
-                    preview_text = " ".join(
-                        [
-                            m["content"]
-                            for m in st.session_state.active_chat
-                            if m["role"] == "user"
-                        ]
-                    )[:2000]
+                    if st.session_state.current_chat_open and supabase:
+                        supabase.table("chat_messages").insert(
+                            {
+                                "session_id": st.session_state.current_chat_open,
+                                "role": "assistant",
+                                "content": response_text,
+                            }
+                        ).execute()
 
-                    try:
-                        title_prompt = (
-                            "Summarize the conversation topic in 3–5 plain words.\n"
-                            "No emojis, no punctuation.\n\n"
-                            f"{preview_text}"
-                        )
-                        title_resp = client.chat.completions.create(
-                            model="gpt-4o-mini",
-                            messages=[{"role": "user", "content": title_prompt}],
-                            max_tokens=15,
-                        )
-                        title_text = title_resp.choices[0].message.content.strip()
-                    except Exception:
-                        title_text = "Untitled chat"
-
-                    try:
-                        summary_prompt = (
-                            "Write a clean bullet-point summary of the user's conversation.\n"
-                            "- Use 3–6 bullets.\n"
-                            "- Keep them short.\n\n"
-                            f"{preview_text}"
-                        )
-                        summary_resp = client.chat.completions.create(
-                            model="gpt-4o-mini",
-                            messages=[{"role": "user", "content": summary_prompt}],
-                            max_tokens=200,
-                        )
-                        summary_text = summary_resp.choices[0].message.content.strip()
-                    except Exception:
-                        summary_text = "- No summary available."
-
-                    if supabase:
-                        result = (
-                            supabase.table("chat_sessions")
-                            .insert({"title": title_text, "summary": summary_text})
-                            .execute()
-                        )
-
-                        load_chat_sessions.clear()
-
-                        new_session_id = result.data[0]["id"]
-                        st.session_state.current_chat_open = new_session_id
-
-                    st.session_state.active_chat = []
-                    st.session_state.chat_sessions = load_chat_sessions()
                     st.rerun()
+                except Exception as e:
+                    st.error(f"Chat failed: {e}")
+
+        if st.session_state.active_chat:
+            if st.button("New Chat", use_container_width=True, key="collector_chat_new"):
+                st.session_state.active_chat = []
+                st.session_state.current_chat_open = None
+                st.session_state.current_session_summary = ""
+                st.session_state.current_session_title = ""
+                st.rerun()
 
 # ============================================================
 # CONTACTS TAB
