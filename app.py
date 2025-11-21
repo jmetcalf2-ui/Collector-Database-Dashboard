@@ -6,6 +6,7 @@ from openai import OpenAI
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
+from services.rag import semantic_search_rag_chunks, _trim_context
 
 st.set_page_config(page_title="Dashboard", layout="wide")
 inject_css()
@@ -40,6 +41,8 @@ if "chat_sessions" not in st.session_state:
     st.session_state.chat_sessions = []
 if "active_chat" not in st.session_state:
     st.session_state.active_chat = []
+if "chat_sources" not in st.session_state:
+    st.session_state.chat_sources = []
 if "current_chat_open" not in st.session_state:
     st.session_state.current_chat_open = None
 if "current_session_title" not in st.session_state:
@@ -180,6 +183,28 @@ NOTES:
         return res.choices[0].message.content.strip()
     except Exception as e:
         return f"⚠️ OpenAI error: {e}"
+
+
+def build_context_from_rag(
+    question: str,
+    max_chars: int = 3200,
+    match_count: int = 12,
+    min_similarity: float = 0.2,
+):
+    """Pull contextual notes from ai.rag_chunks/public.leads for chat grounding."""
+    if not supabase or not question.strip():
+        return "", []
+    try:
+        rows = semantic_search_rag_chunks(
+            supabase,
+            query=question,
+            match_count=match_count,
+            min_similarity=min_similarity,
+        )
+        context_text, used_rows = _trim_context(rows, max_chars=max_chars)
+        return context_text, used_rows
+    except Exception:
+        return "", []
 
 tabs = st.tabs(["Search", "Contacts", "Saved Sets"])
 
@@ -343,19 +368,19 @@ with tabs[0]:
     st.markdown("---")
 
     # ------------------------------
-    # Inline CollectorGPT bar (no labels)
+    # Inline AI chat bar (no labels)
     # ------------------------------
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        st.warning("Set OPENAI_API_KEY to chat with CollectorGPT.")
+        st.warning("Set OPENAI_API_KEY to use the AI chat.")
     else:
         system_prompt_path = Path("prompts/system_prompt.md")
         if system_prompt_path.exists():
             system_prompt = system_prompt_path.read_text().strip()
         else:
             system_prompt = (
-                "You are CollectorGPT — a helpful art-market assistant. "
-                "Keep responses factual, concise, and well-reasoned."
+                "You are an art-market specialist AI. "
+                "Use concise, factual reasoning and stay on collectors, artists, museums, and art-market dynamics."
             )
 
         client = OpenAI(api_key=api_key)
@@ -418,12 +443,30 @@ with tabs[0]:
         else:
             st.markdown("<div style='clear:both;'></div>", unsafe_allow_html=True)
 
-        user_input = st.chat_input(placeholder="Ask CollectorGPT about collectors, regions, or interests...", key="collector_chat_bar")
+        if st.session_state.chat_sources:
+            st.markdown(
+                "###### Sources used",
+                unsafe_allow_html=True,
+            )
+            for i, src in enumerate(st.session_state.chat_sources[:5]):
+                name = src.get("full_name") or "Unknown"
+                city = (src.get("city") or "").strip()
+                country = (src.get("country") or "").strip()
+                loc = ", ".join([p for p in [city, country] if p])
+                snippet = (src.get("notes") or "").strip()
+                if len(snippet) > 160:
+                    snippet = snippet[:157] + "..."
+                st.caption(f"{i+1}. {name}" + (f" — {loc}" if loc else ""))
+                if snippet:
+                    st.caption(f"   “{snippet}”")
+
+        user_input = st.chat_input(placeholder="Ask about collectors, artists, or the art market...", key="collector_chat_bar")
 
         if user_input:
             st.session_state.active_chat.append(
                 {"role": "user", "content": user_input}
             )
+            st.session_state.chat_sources = []
 
             if st.session_state.current_chat_open and supabase:
                 supabase.table("chat_messages").insert(
@@ -436,7 +479,19 @@ with tabs[0]:
 
             with st.spinner("Thinking..."):
                 try:
+                    context_text, used_chunks = build_context_from_rag(user_input)
+
                     messages = [{"role": "system", "content": system_prompt}]
+                    if context_text:
+                        messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    "Database context from ai.rag_chunks and public.leads:\n"
+                                    f"{context_text}"
+                                ),
+                            }
+                        )
                     messages.extend(st.session_state.active_chat)
 
                     completion = client.chat.completions.create(
@@ -451,15 +506,16 @@ with tabs[0]:
                     st.session_state.active_chat.append(
                         {"role": "assistant", "content": response_text}
                     )
+                    st.session_state.chat_sources = used_chunks
 
                     if st.session_state.current_chat_open and supabase:
                         supabase.table("chat_messages").insert(
-                            {
-                                "session_id": st.session_state.current_chat_open,
-                                "role": "assistant",
-                                "content": response_text,
-                            }
-                        ).execute()
+                    {
+                        "session_id": st.session_state.current_chat_open,
+                        "role": "assistant",
+                        "content": response_text,
+                        }
+                    ).execute()
 
                     st.rerun()
                 except Exception as e:
