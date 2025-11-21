@@ -194,6 +194,8 @@ def build_context_from_rag(
     """Pull contextual notes from ai.rag_chunks/public.leads for chat grounding."""
     if not supabase or not question.strip():
         return "", []
+    rows = []
+    # Primary: use ai.rag_chunks RPC
     try:
         rows = semantic_search_rag_chunks(
             supabase,
@@ -201,10 +203,53 @@ def build_context_from_rag(
             match_count=match_count,
             min_similarity=min_similarity,
         )
-        context_text, used_rows = _trim_context(rows, max_chars=max_chars)
-        return context_text, used_rows
     except Exception:
-        return "", []
+        rows = []
+
+    # Fallback 1: semantic search on leads/leads_supplements
+    if not rows:
+        try:
+            emb = get_query_embedding_cached(question)
+            rpc = supabase.rpc(
+                "rpc_semantic_search_leads_supplements",
+                {
+                    "query_embedding": emb,
+                    "match_count": match_count,
+                    "min_score": min_similarity,
+                },
+            ).execute()
+            matched_ids = []
+            for r in rpc.data or []:
+                lid = r.get("lead_id")
+                if lid:
+                    matched_ids.append(str(lid))
+            if matched_ids:
+                res = (
+                    supabase.table("leads")
+                    .select("lead_id, full_name, city, country, notes")
+                    .in_("lead_id", matched_ids)
+                    .execute()
+                )
+                rows = res.data or []
+        except Exception:
+            rows = []
+
+    # Fallback 2: simple text search on notes when embeddings/rpc fail
+    if not rows:
+        try:
+            res = (
+                supabase.table("leads")
+                .select("lead_id, full_name, city, country, notes")
+                .ilike("notes", f"%{question}%")
+                .limit(match_count)
+                .execute()
+            )
+            rows = res.data or []
+        except Exception:
+            rows = []
+
+    context_text, used_rows = _trim_context(rows, max_chars=max_chars)
+    return context_text, used_rows
 
 tabs = st.tabs(["Search", "Contacts", "Saved Sets"])
 
