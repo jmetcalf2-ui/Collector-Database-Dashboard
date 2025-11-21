@@ -189,7 +189,7 @@ def build_context_from_rag(
     question: str,
     max_chars: int = 3200,
     match_count: int = 12,
-    min_similarity: float = 0.2,
+    min_similarity: float = 0.1,
 ):
     """Pull contextual notes from ai.rag_chunks/public.leads for chat grounding."""
     if not supabase or not question.strip():
@@ -526,7 +526,17 @@ with tabs[0]:
                 try:
                     context_text, used_chunks = build_context_from_rag(user_input)
 
-                    messages = [{"role": "system", "content": system_prompt}]
+                    messages = [
+                        {
+                            "role": "system",
+                            "content": (
+                                system_prompt
+                                + " Use only the provided database context to answer. "
+                                "If no relevant context is available, say you could not find matching collectors."
+                            ),
+                        }
+                    ]
+
                     if context_text:
                         messages.append(
                             {
@@ -537,16 +547,33 @@ with tabs[0]:
                                 ),
                             }
                         )
+                    else:
+                        messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    "No database context found for this query. "
+                                    "Respond that no matching collectors were found in the database."
+                                ),
+                            }
+                        )
+
                     messages.extend(st.session_state.active_chat)
 
-                    completion = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=messages,
-                        temperature=0.5,
-                        max_tokens=600,
-                    )
+                    if not context_text:
+                        response_text = (
+                            "I couldn't find matching collectors in the database for that query. "
+                            "Try refining names, artists, or locations."
+                        )
+                    else:
+                        completion = client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=messages,
+                            temperature=0.2,
+                            max_tokens=600,
+                        )
 
-                    response_text = completion.choices[0].message.content.strip()
+                        response_text = completion.choices[0].message.content.strip()
 
                     st.session_state.active_chat.append(
                         {"role": "assistant", "content": response_text}
