@@ -339,6 +339,9 @@ with tabs[0]:
 
         st.session_state["search_page"] = 0
 
+    # Divider between search controls and chat
+    st.markdown("---")
+
     # ------------------------------
     # Inline CollectorGPT bar (no labels)
     # ------------------------------
@@ -359,6 +362,20 @@ with tabs[0]:
 
         if st.session_state.current_chat_open and supabase:
             st.session_state.chat_sessions = load_chat_sessions()
+
+        if st.session_state.active_chat:
+            st.markdown(
+                """
+                <div style="
+                    border:1px solid #e0e0e0;
+                    border-radius:12px;
+                    padding:12px;
+                    margin:12px 0 8px;
+                    background-color:#fafafa;
+                    overflow:hidden;">
+                """,
+                unsafe_allow_html=True,
+            )
 
         for msg in st.session_state.active_chat:
             if msg["role"] == "user":
@@ -396,7 +413,10 @@ with tabs[0]:
                     unsafe_allow_html=True,
                 )
 
-        st.markdown("<div style='clear:both;'></div>", unsafe_allow_html=True)
+        if st.session_state.active_chat:
+            st.markdown("<div style='clear:both;'></div></div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div style='clear:both;'></div>", unsafe_allow_html=True)
 
         user_input = st.chat_input(placeholder="Ask CollectorGPT about collectors, regions, or interests...", key="collector_chat_bar")
 
@@ -452,6 +472,9 @@ with tabs[0]:
                 st.session_state.current_session_summary = ""
                 st.session_state.current_session_title = ""
                 st.rerun()
+
+    # Divider between chat and results grid
+    st.markdown("---")
 
     # ==========================================
     # SHOW SEARCH OR FULL GRID
