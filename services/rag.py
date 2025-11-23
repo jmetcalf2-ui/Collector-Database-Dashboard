@@ -30,7 +30,7 @@ def semantic_search_rag_chunks(
     supabase,
     query: str,
     match_count: int = 10,
-    min_similarity: float = 0.08,
+    min_similarity: float = 0.05,
     embedding_model: str | None = None,
 ) -> List[Dict[str, Any]]:
     """
