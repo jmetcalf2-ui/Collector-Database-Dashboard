@@ -1049,7 +1049,7 @@ with tabs[2]:
     else:
         sets = (
             supabase.table("saved_sets")
-            .select("*")
+            .select("id, name, description, created_at")
             .order("created_at", desc=True)
             .execute()
             .data
