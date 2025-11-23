@@ -169,7 +169,7 @@ def answer_with_context(
     max_context_chars: int = 3500,
 ) -> Dict[str, Any]:
     """
-    Retrieve context from ai.rag_chunks and ask GPT for an answer.
+    Retrieve context from public.rag_chunks and ask GPT for an answer.
     """
     # 1. Fetch relevant chunks
     chunks = semantic_search_rag_chunks(
