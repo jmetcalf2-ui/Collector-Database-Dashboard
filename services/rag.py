@@ -89,18 +89,39 @@ def _trim_context(chunks: List[Dict[str, Any]], max_chars: int = 3500) -> Tuple[
     """
     Merge top retrieved rows into a text context for GPT.
     """
+    def extract_text(row: Dict[str, Any]) -> str:
+        # Try common text keys first, then any long-ish string value.
+        preferred_keys = (
+            "notes",
+            "chunk",
+            "content",
+            "text",
+            "chunk_text",
+            "body",
+            "document",
+            "snippet",
+        )
+        for key in preferred_keys:
+            val = row.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+
+        # Fallback: any string value that's not an ID/geo field and has substance.
+        skip = {"full_name", "city", "country", "lead_id", "id", "similarity"}
+        for key, val in row.items():
+            if key in skip:
+                continue
+            if isinstance(val, str):
+                trimmed = val.strip()
+                if len(trimmed) > 12:  # avoid tiny tokens like country codes
+                    return trimmed
+        return ""
+
     used: List[Dict[str, Any]] = []
     buf: List[str] = []
     total = 0
     for row in chunks:
-        raw_piece = (
-            row.get("notes")
-            or row.get("chunk")
-            or row.get("content")
-            or row.get("text")
-            or ""
-        )
-        piece = str(raw_piece).strip()
+        piece = extract_text(row)
         if not piece:
             continue
         entry = (
