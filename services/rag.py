@@ -4,7 +4,7 @@ import os
 from typing import List, Dict, Any, Tuple
 from openai import OpenAI
 
-# ai.rag_chunks embeddings are 1536-dim vectors (text-embedding-3-small)
+# rag_chunks embeddings are 1536-dim vectors (text-embedding-3-small)
 DEFAULT_EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 DEFAULT_CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
 
@@ -34,7 +34,7 @@ def semantic_search_rag_chunks(
     embedding_model: str | None = None,
 ) -> List[Dict[str, Any]]:
     """
-    Runs a similarity search directly against ai.rag_chunks via RPC.
+    Runs a similarity search directly against public.rag_chunks via RPC.
     Assumes you have this SQL function in Supabase:
 
         create or replace function ai.match_rag_chunks(
@@ -76,7 +76,12 @@ def semantic_search_rag_chunks(
     }
 
     # Try common RPC names (with/without schema) in case the function was created differently.
-    for fn in ("ai.match_rag_chunks", "match_rag_chunks"):
+    for fn in (
+        "public.match_rag_chunks",
+        "match_public_rag_chunks",
+        "match_rag_chunks",
+        "ai.match_rag_chunks",  # legacy
+    ):
         try:
             res = supabase.rpc(fn, rpc_payload).execute()
             if res and getattr(res, "data", None):
@@ -85,8 +90,20 @@ def semantic_search_rag_chunks(
             # Try the next fallback name
             continue
 
-    # Nothing returned
-    return []
+    # Fallback: simple text search when RPCs are unavailable.
+    try:
+        res = (
+            supabase.table("rag_chunks")
+            .select("lead_id, full_name, city, country, notes, chunk, content, text")
+            .or_(
+                f"notes.ilike.%{query}%,chunk.ilike.%{query}%,content.ilike.%{query}%"
+            )
+            .limit(match_count)
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
 
 
 def _trim_context(chunks: List[Dict[str, Any]], max_chars: int = 3500) -> Tuple[str, List[Dict[str, Any]]]:
