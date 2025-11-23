@@ -716,59 +716,17 @@ with tabs[0]:
         st.write(f"Showing {len(page_results)} of {total_results} results")
 
         if page_results:
-            df = pd.DataFrame(page_results)
-            if not df.empty:
-                df["location"] = df.apply(
-                    lambda r: ", ".join(
-                        [p for p in [str(r.get("city") or "").strip(), str(r.get("country") or "").strip()] if p]
-                    ),
-                    axis=1,
-                )
-                display_cols = [
-                    "full_name",
-                    "location",
-                    "primary_role",
-                    "tier",
-                    "email",
-                    "notes",
-                ]
-                existing_cols = [c for c in display_cols if c in df.columns]
-                df_display = df[existing_cols].copy()
-                if "notes" in df_display.columns:
-                    df_display["notes"] = df_display["notes"].fillna("").apply(
-                        lambda x: (x[:160] + "…") if len(x) > 160 else x
-                    )
-                st.dataframe(
-                    df_display,
-                    use_container_width=True,
-                    height=520,
-                )
-
-            lead_options = [str(r.get("lead_id")) for r in page_results if r.get("lead_id")]
-            name_lookup = {
-                str(r.get("lead_id")): r.get("full_name", "Unnamed") for r in page_results
-            }
-            default_id = st.session_state.get("active_search_lead") or (lead_options[0] if lead_options else None)
-            if lead_options and default_id not in lead_options:
-                default_id = lead_options[0]
-
-            selected_lead_id = st.selectbox(
-                "Open collector",
-                options=lead_options,
-                index=lead_options.index(default_id) if lead_options and default_id else 0,
-                format_func=lambda lid: name_lookup.get(lid, lid),
-                key="search_detail_selector",
-            ) if lead_options else None
-
-            if selected_lead_id:
-                st.session_state["active_search_lead"] = selected_lead_id
-                selected_lead = next(
-                    (r for r in page_results if str(r.get("lead_id")) == selected_lead_id),
-                    None,
-                )
-                if selected_lead:
-                    with st.container():
-                        render_lead_detail(selected_lead, summary_prefix="search")
+            left_col, right_col = st.columns(2)
+            for idx, lead in enumerate(page_results):
+                col = left_col if idx % 2 == 0 else right_col
+                name = lead.get("full_name", "Unnamed")
+                city_val = (lead.get("city") or "").strip()
+                country_val = (lead.get("country") or "").strip()
+                location = ", ".join([p for p in [city_val, country_val] if p])
+                label = f"⬤ {name}" + (f" — {location}" if location else "")
+                with col:
+                    with st.expander(label):
+                        render_lead_detail(lead, summary_prefix="search")
         else:
             st.info("No results on this page.")
 
