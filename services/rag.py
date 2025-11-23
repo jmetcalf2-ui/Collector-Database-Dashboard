@@ -93,7 +93,14 @@ def _trim_context(chunks: List[Dict[str, Any]], max_chars: int = 3500) -> Tuple[
     buf: List[str] = []
     total = 0
     for row in chunks:
-        piece = (row.get("notes") or "").strip()
+        raw_piece = (
+            row.get("notes")
+            or row.get("chunk")
+            or row.get("content")
+            or row.get("text")
+            or ""
+        )
+        piece = str(raw_piece).strip()
         if not piece:
             continue
         entry = (
