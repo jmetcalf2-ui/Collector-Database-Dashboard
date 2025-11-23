@@ -6,7 +6,7 @@ from openai import OpenAI
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
-from services.rag import semantic_search_rag_chunks, _trim_context
+from services.rag import semantic_search_rag_chunks, _trim_context, answer_with_context
 
 st.set_page_config(page_title="Dashboard", layout="wide")
 inject_css()
@@ -185,71 +185,105 @@ NOTES:
         return f"⚠️ OpenAI error: {e}"
 
 
-def build_context_from_rag(
-    question: str,
-    max_chars: int = 3200,
-    match_count: int = 12,
-    min_similarity: float = 0.1,
-):
-    """Pull contextual notes from ai.rag_chunks/public.leads for chat grounding."""
-    if not supabase or not question.strip():
-        return "", []
-    rows = []
-    # Primary: use ai.rag_chunks RPC
+@st.cache_data(show_spinner=False)
+def load_lead_supplements(lead_id: str):
+    """Cached fetch of supplemental notes for a lead to avoid repeated round-trips."""
+    if not supabase:
+        return []
     try:
-        rows = semantic_search_rag_chunks(
-            supabase,
-            query=question,
-            match_count=match_count,
-            min_similarity=min_similarity,
+        res = (
+            supabase.table("leads_supplements")
+            .select("notes")
+            .eq("lead_id", lead_id)
+            .execute()
         )
+        return res.data or []
     except Exception:
-        rows = []
+        return []
 
-    # Fallback 1: semantic search on leads/leads_supplements
-    if not rows:
-        try:
-            emb = get_query_embedding_cached(question)
-            rpc = supabase.rpc(
-                "rpc_semantic_search_leads_supplements",
-                {
-                    "query_embedding": emb,
-                    "match_count": match_count,
-                    "min_score": min_similarity,
-                },
-            ).execute()
-            matched_ids = []
-            for r in rpc.data or []:
-                lid = r.get("lead_id")
-                if lid:
-                    matched_ids.append(str(lid))
-            if matched_ids:
-                res = (
-                    supabase.table("leads")
-                    .select("lead_id, full_name, city, country, notes")
-                    .in_("lead_id", matched_ids)
-                    .execute()
+
+def prefetch_page(cache_fn, page: int, per_page: int, direction: int = 1):
+    """
+    Warm the cache for an adjacent page so pagination feels instant.
+    """
+    target = page + direction
+    if target < 0:
+        return
+    try:
+        cache_fn(target, per_page)
+    except Exception:
+        pass
+
+
+def render_lead_detail(lead, summary_prefix: str):
+    """Single detail pane for a lead to reduce re-render load."""
+    lead_id = str(lead.get("lead_id"))
+    name = lead.get("full_name", "Unnamed")
+    role_val = lead.get("primary_role", "—")
+    tier_val = lead.get("tier", "—")
+    city_val = (lead.get("city") or "").strip()
+    country_val = (lead.get("country") or "").strip()
+    email_val = lead.get("email", "—")
+    notes_val = (lead.get("notes") or "").strip()
+
+    location = ", ".join([p for p in [city_val, country_val] if p]) or "—"
+
+    st.markdown(f"### {name}")
+    st.caption(f"{role_val} • Tier {tier_val} • {location}")
+    st.write(email_val)
+
+    if notes_val:
+        st.markdown("**Notes**")
+        st.write(notes_val)
+
+    summary_key = f"summary_{summary_prefix}_{lead_id}"
+    if summary_key not in st.session_state:
+        if st.button(
+            f"Summarize {name}",
+            key=f"sum_{summary_prefix}_{lead_id}",
+            use_container_width=True,
+        ):
+            with st.spinner("Summarizing notes..."):
+                supplements = load_lead_supplements(lead_id)
+                supplement_notes = "\n\n".join(
+                    (s.get("notes") or "").strip() for s in supplements
                 )
-                rows = res.data or []
-        except Exception:
-            rows = []
 
-    # Fallback 2: simple text search on notes when embeddings/rpc fail
-    if not rows:
-        try:
-            res = (
-                supabase.table("leads")
-                .select("lead_id, full_name, city, country, notes")
-                .ilike("notes", f"%{question}%")
-                .limit(match_count)
-                .execute()
-            )
-            rows = res.data or []
-        except Exception:
-            rows = []
+                combined = (
+                    notes_val
+                    + ("\n\n" if notes_val and supplement_notes else "")
+                    + supplement_notes
+                ).strip()
 
-    context_text, used_rows = _trim_context(rows, max_chars=max_chars)
-    return context_text, used_rows
+                client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                prompt = f"""
+Summarize these collector notes into 5–7 factual bullet points.
+Avoid adjectives. Focus on artists collected, museum affiliations, geography,
+philanthropy, acquisitions, and collecting tendencies.
+
+NOTES:
+{combined}
+"""
+
+                resp = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You summarize art collectors factually.",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.2,
+                    max_tokens=500,
+                )
+
+                st.session_state[summary_key] = resp.choices[0].message.content.strip()
+                st.rerun()
+    else:
+        st.markdown("**Summary**")
+        st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+
 
 tabs = st.tabs(["Search", "Contacts", "Saved Sets"])
 
@@ -279,36 +313,9 @@ with tabs[0]:
     with col5:
         role = st.text_input("Primary Role")
 
-    semantic_query = st.text_input("Semantic Search")
-    semantic_min_score = 0.35
-    semantic_max_matches = 80
-    min_semantic_chars = 8
-
-    def semantic_filter_passes(lead_row):
-        """Apply field-level filters to semantic results for extra precision."""
-        def contains(value, term):
-            return term.lower() in (value or "").lower()
-
-        if keyword and not (
-            contains(lead_row.get("full_name", ""), keyword)
-            or contains(lead_row.get("email", ""), keyword)
-            or contains(lead_row.get("primary_role", ""), keyword)
-        ):
-            return False
-        if city and not contains(lead_row.get("city", ""), city):
-            return False
-        if country and not contains(lead_row.get("country", ""), country):
-            return False
-        if tier and lead_row.get("tier") != tier:
-            return False
-        if role and not contains(lead_row.get("primary_role", ""), role):
-            return False
-        return True
-
     if (
         keyword.strip()=="" and city.strip()=="" and country.strip()=="" and
-        (tier=="" or tier is None) and role.strip()=="" and
-        semantic_query.strip()==""  
+        (tier=="" or tier is None) and role.strip()=="" 
     ):
         st.session_state["search_results"] = None
         st.session_state["search_page"] = 0
@@ -316,96 +323,27 @@ with tabs[0]:
     if st.button("Search Leads") and supabase:
         with st.spinner("Searching..."):
 
-            semantic_query_clean = semantic_query.strip()
+            try:
+                q = supabase.table("leads").select(
+                    "lead_id, full_name, email, tier, primary_role, city, country, notes"
+                )
+                if keyword:
+                    w = f"%{keyword}%"
+                    q = q.or_(f"full_name.ilike.{w},email.ilike.{w},primary_role.ilike.{w}")
+                if city:
+                    q = q.ilike("city", f"%{city}%")
+                if country:
+                    q = q.ilike("country", f"%{country}%")
+                if tier:
+                    q = q.eq("tier", tier)
+                if role:
+                    q = q.ilike("primary_role", f"%{role}%")
 
-            if semantic_query_clean:
-                if len(semantic_query_clean) < min_semantic_chars:
-                    st.warning("Please provide a more detailed semantic query (8+ characters) for accurate matches.")
-                    st.session_state["search_results"] = []
-                else:
-                    try:
-                        emb = get_query_embedding_cached(semantic_query_clean)
-                        rpc = supabase.rpc(
-                            "rpc_semantic_search_leads_supplements",
-                            {
-                                "query_embedding": emb,
-                                "match_count": semantic_max_matches,
-                                "min_score": semantic_min_score,
-                            },
-                        ).execute()
-                        rows = rpc.data or []
-
-                        def extract_score(row):
-                            for key in ("similarity", "score", "match_score", "distance"):
-                                val = row.get(key)
-                                if isinstance(val, (int, float)):
-                                    return float(val)
-                            return None
-
-                        scored_ids = []
-                        fallback_ids = []
-                        for r in rows:
-                            lid = r.get("lead_id")
-                            if not lid:
-                                continue
-                            fallback_ids.append(str(lid))
-                            score_val = extract_score(r)
-                            if score_val is not None and score_val >= semantic_min_score:
-                                scored_ids.append((str(lid), score_val))
-
-                        if scored_ids:
-                            scored_ids.sort(key=lambda x: x[1], reverse=True)
-                            lead_ids = [lid for lid, _ in scored_ids][:semantic_max_matches]
-                        else:
-                            lead_ids = list(dict.fromkeys(fallback_ids[:20]))
-
-                        if lead_ids:
-                            res = (
-                                supabase.table("leads")
-                                .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
-                                .in_("lead_id", lead_ids)
-                                .execute()
-                            )
-                            raw_results = res.data or []
-                            score_lookup = {lid: score for lid, score in scored_ids}
-                            filtered_results = [
-                                r for r in raw_results if semantic_filter_passes(r)
-                            ]
-                            filtered_results.sort(
-                                key=lambda r: score_lookup.get(str(r.get("lead_id")), 0),
-                                reverse=True,
-                            )
-                            st.session_state["search_results"] = filtered_results
-                            if not filtered_results:
-                                st.info("No matches cleared the similarity threshold with the given filters. Try refining the query.")
-                        else:
-                            st.session_state["search_results"] = []
-                            st.info("No semantic matches above the accuracy threshold. Try adding more detail or different terms.")
-                    except Exception as e:
-                        st.error(f"Semantic search error: {e}")
-                        st.session_state["search_results"] = []
-
-            else:
-                try:
-                    q = supabase.table("leads").select(
-                        "lead_id, full_name, email, tier, primary_role, city, country, notes"
-                    )
-                    if keyword:
-                        w = f"%{keyword}%"
-                        q = q.or_(f"full_name.ilike.{w},email.ilike.{w},primary_role.ilike.{w}")
-                    if city:
-                        q = q.ilike("city", f"%{city}%")
-                    if country:
-                        q = q.ilike("country", f"%{country}%")
-                    if tier:
-                        q = q.eq("tier", tier)
-                    if role:
-                        q = q.ilike("primary_role", f"%{role}%")
-
-                    res = q.limit(2000).execute()
-                    st.session_state["search_results"] = res.data or []
-                except:
-                    st.session_state["search_results"] = []
+                res = q.limit(2000).execute()
+                st.session_state["search_results"] = res.data or []
+            except Exception as e:
+                st.error(f"Search error: {e}")
+                st.session_state["search_results"] = []
 
         st.session_state["search_page"] = 0
 
@@ -427,8 +365,6 @@ with tabs[0]:
                 "You are an art-market specialist AI. "
                 "Use concise, factual reasoning and stay on collectors, artists, museums, and art-market dynamics."
             )
-
-        client = OpenAI(api_key=api_key)
 
         if st.session_state.current_chat_open and supabase:
             st.session_state.chat_sessions = load_chat_sessions()
@@ -524,56 +460,17 @@ with tabs[0]:
 
             with st.spinner("Thinking..."):
                 try:
-                    context_text, used_chunks = build_context_from_rag(user_input)
+                    # Run RAG answer
+                    result = answer_with_context(
+                        supabase=supabase,
+                        question=user_input,
+                        system_prompt=system_prompt,
+                        match_count=10,
+                        min_similarity=0.12,
+                    )
 
-                    messages = [
-                        {
-                            "role": "system",
-                            "content": (
-                                system_prompt
-                                + " Use only the provided database context to answer. "
-                                "If no relevant context is available, say you could not find matching collectors."
-                            ),
-                        }
-                    ]
-
-                    if context_text:
-                        messages.append(
-                            {
-                                "role": "system",
-                                "content": (
-                                    "Database context from ai.rag_chunks and public.leads:\n"
-                                    f"{context_text}"
-                                ),
-                            }
-                        )
-                    else:
-                        messages.append(
-                            {
-                                "role": "system",
-                                "content": (
-                                    "No database context found for this query. "
-                                    "Respond that no matching collectors were found in the database."
-                                ),
-                            }
-                        )
-
-                    messages.extend(st.session_state.active_chat)
-
-                    if not context_text:
-                        response_text = (
-                            "I couldn't find matching collectors in the database for that query. "
-                            "Try refining names, artists, or locations."
-                        )
-                    else:
-                        completion = client.chat.completions.create(
-                            model="gpt-4o-mini",
-                            messages=messages,
-                            temperature=0.2,
-                            max_tokens=600,
-                        )
-
-                        response_text = completion.choices[0].message.content.strip()
+                    response_text = result["answer"]
+                    used_chunks = result.get("sources", []) or []
 
                     st.session_state.active_chat.append(
                         {"role": "assistant", "content": response_text}
@@ -582,12 +479,12 @@ with tabs[0]:
 
                     if st.session_state.current_chat_open and supabase:
                         supabase.table("chat_messages").insert(
-                    {
-                        "session_id": st.session_state.current_chat_open,
-                        "role": "assistant",
-                        "content": response_text,
-                        }
-                    ).execute()
+                            {
+                                "session_id": st.session_state.current_chat_open,
+                                "role": "assistant",
+                                "content": response_text,
+                            }
+                        ).execute()
 
                     st.rerun()
                 except Exception as e:
@@ -622,86 +519,62 @@ with tabs[0]:
         total_pages = max(1, (total_full + per_page - 1) // per_page)
 
         leads = get_full_grid_page(st.session_state.full_grid_page, per_page)
+        prefetch_page(get_full_grid_page, st.session_state.full_grid_page, per_page)
 
         st.write(f"Showing {len(leads)} of {total_full} collectors")
 
-        left_col, right_col = st.columns(2)
+        if leads:
+            df = pd.DataFrame(leads)
+            if not df.empty:
+                df["location"] = df.apply(
+                    lambda r: ", ".join(
+                        [p for p in [str(r.get("city") or "").strip(), str(r.get("country") or "").strip()] if p]
+                    ),
+                    axis=1,
+                )
+                cols = [
+                    "full_name",
+                    "location",
+                    "primary_role",
+                    "tier",
+                    "email",
+                    "notes",
+                ]
+                existing_cols = [c for c in cols if c in df.columns]
+                df_display = df[existing_cols].copy()
+                if "notes" in df_display.columns:
+                    df_display["notes"] = df_display["notes"].fillna("").apply(
+                        lambda x: (x[:160] + "…") if len(x) > 160 else x
+                    )
+                st.dataframe(
+                    df_display,
+                    use_container_width=True,
+                    height=520,
+                )
 
-        for i, lead in enumerate(leads):
-            col = left_col if i % 2 == 0 else right_col
+            lead_options = [str(r.get("lead_id")) for r in leads if r.get("lead_id")]
+            name_lookup = {str(r.get("lead_id")): r.get("full_name", "Unnamed") for r in leads}
+            default_id = st.session_state.get("active_full_lead") or (lead_options[0] if lead_options else None)
+            if lead_options and default_id not in lead_options:
+                default_id = lead_options[0]
 
-            name = lead.get("full_name", "Unnamed")
-            city_val = (lead.get("city") or "").strip()
-            label = f"{name} — {city_val}" if city_val else name
-            lead_id = str(lead.get("lead_id"))
+            selected_lead_id = st.selectbox(
+                "Open collector",
+                options=lead_options,
+                index=lead_options.index(default_id) if lead_options and default_id else 0,
+                format_func=lambda lid: name_lookup.get(lid, lid),
+                key="full_detail_selector",
+            ) if lead_options else None
 
-            with col:
-                with st.expander(label):
-                    tier_val = lead.get("tier", "—")
-                    role_val = lead.get("primary_role", "—")
-                    email_val = lead.get("email", "—")
-                    country_val = (lead.get("country") or "").strip()
-
-                    if city_val or country_val:
-                        st.caption(f"{city_val}, {country_val}".strip(", "))
-                    st.caption(f"{role_val} | Tier {tier_val}")
-                    st.write(email_val)
-
-                    sum_col, _ = st.columns([3, 1])
-                    summary_key = f"summary_{lead_id}"
-
-                    with sum_col:
-                        if summary_key not in st.session_state:
-                            if st.button(f"Summarize {name}", key=f"sum_full_{lead_id}"):
-                                with st.spinner("Summarizing notes..."):
-                                    supplements = (
-                                        supabase.table("leads_supplements")
-                                        .select("notes")
-                                        .eq("lead_id", lead_id)
-                                        .execute()
-                                        .data
-                                        or []
-                                    )
-
-                                    base_notes = lead.get("notes") or ""
-                                    supplement_notes = "\n\n".join(
-                                        (s.get("notes") or "").strip()
-                                        for s in supplements
-                                    )
-
-                                    combined = (
-                                        base_notes
-                                        + ("\n\n" if base_notes and supplement_notes else "")
-                                        + supplement_notes
-                                    ).strip()
-
-                                    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                                    prompt = f"""
-Summarize these collector notes into 5–7 factual bullet points.
-Avoid adjectives. Focus on artists collected, museum affiliations, geography,
-philanthropy, acquisitions, and collecting tendencies.
-
-NOTES:
-{combined}
-"""
-
-                                    resp = client.chat.completions.create(
-                                        model="gpt-4o-mini",
-                                        messages=[
-                                            {"role": "system", "content": "You summarize art collectors factually."},
-                                            {"role": "user", "content": prompt},
-                                        ],
-                                        temperature=0.2,
-                                        max_tokens=500,
-                                    )
-
-                                    st.session_state[summary_key] = (
-                                        resp.choices[0].message.content.strip()
-                                    )
-                                    st.rerun()
-                        else:
-                            st.markdown("**Summary:**")
-                            st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+            if selected_lead_id:
+                st.session_state["active_full_lead"] = selected_lead_id
+                selected_lead = next(
+                    (r for r in leads if str(r.get("lead_id")) == selected_lead_id),
+                    None,
+                )
+                if selected_lead:
+                    with st.container():
+                        render_lead_detail(selected_lead, summary_prefix="full")
 
         col_space_left, prev_col, next_col, col_space_right = st.columns([2, 1, 1, 2])
         with prev_col:
@@ -735,77 +608,20 @@ NOTES:
 
         st.write(f"Showing {len(page_results)} of {total_results} results")
 
-        left_col, right_col = st.columns(2)
-
-        for i, lead in enumerate(page_results):
-            col = left_col if i % 2 == 0 else right_col
-            lead_id = str(lead.get("lead_id"))
-
-            name = lead.get("full_name", "Unnamed")
-            city_val = (lead.get("city") or "").strip()
-            label = f"{name} — {city_val}" if city_val else name
-
-            with col:
-                with st.expander(label):
-                    st.markdown(f"**{name}**")
-                    st.caption(f"{lead.get('primary_role', '—')} | Tier {lead.get('tier', '—')}")
-                    st.write(lead.get("email", "—"))
-
-                    sum_col, _ = st.columns([3, 1])
-                    summary_key = f"summary_{lead_id}"
-
-                    with sum_col:
-                        if summary_key not in st.session_state:
-                            if st.button(f"Summarize {name}", key=f"sum_search_{lead_id}"):
-                                with st.spinner("Summarizing notes..."):
-                                    supplements = (
-                                        supabase.table("leads_supplements")
-                                        .select("notes")
-                                        .eq("lead_id", lead_id)
-                                        .execute()
-                                        .data
-                                        or []
-                                    )
-
-                                    base_notes = lead.get("notes") or ""
-                                    supplement_notes = "\n\n".join(
-                                        (s.get("notes") or "").strip()
-                                        for s in supplements
-                                    )
-
-                                    combined = (
-                                        base_notes
-                                        + ("\n\n" if base_notes and supplement_notes else "")
-                                        + supplement_notes
-                                    ).strip()
-
-                                    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                                    prompt = f"""
-Summarize these collector notes into 5–7 factual bullet points.
-Avoid adjectives. Focus on artists collected, museum affiliations, geography,
-philanthropy, acquisitions, and collecting tendencies.
-
-NOTES:
-{combined}
-"""
-
-                                    resp = client.chat.completions.create(
-                                        model="gpt-4o-mini",
-                                        messages=[
-                                            {"role": "system", "content": "You summarize art collectors factually."},
-                                            {"role": "user", "content": prompt},
-                                        ],
-                                        temperature=0.2,
-                                        max_tokens=500,
-                                    )
-
-                                    st.session_state[summary_key] = (
-                                        resp.choices[0].message.content.strip()
-                                    )
-                                    st.rerun()
-                        else:
-                            st.markdown("**Summary:**")
-                            st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+        if page_results:
+            left_col, right_col = st.columns(2)
+            for idx, lead in enumerate(page_results):
+                col = left_col if idx % 2 == 0 else right_col
+                name = lead.get("full_name", "Unnamed")
+                city_val = (lead.get("city") or "").strip()
+                country_val = (lead.get("country") or "").strip()
+                location = ", ".join([p for p in [city_val, country_val] if p])
+                label = f"⬤ {name}" + (f" — {location}" if location else "")
+                with col:
+                    with st.expander(label):
+                        render_lead_detail(lead, summary_prefix="search")
+        else:
+            st.info("No results on this page.")
 
         prev_col, next_col = st.columns([1, 1])
         with prev_col:
@@ -919,6 +735,7 @@ with tabs[1]:
         )
 
         leads = get_contacts_page(st.session_state.data_page, per_page)
+        prefetch_page(get_contacts_page, st.session_state.data_page, per_page)
 
         if leads:
             df = pd.DataFrame(leads)
@@ -985,14 +802,18 @@ with tabs[2]:
     if not supabase:
         st.warning("Database unavailable.")
     else:
-        sets = (
-            supabase.table("saved_sets")
-            .select("*")
-            .order("created_at", desc=True)
-            .execute()
-            .data
-            or []
-        )
+        try:
+            sets = (
+                supabase.table("saved_sets")
+                .select("*")
+                .order("created_at", desc=True)
+                .execute()
+                .data
+                or []
+            )
+        except Exception as e:
+            st.error(f"Could not load saved sets: {e}")
+            sets = []
         if not sets:
             st.info("No saved sets yet.")
         else:
