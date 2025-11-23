@@ -6,7 +6,7 @@ from openai import OpenAI
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
-from services.rag import semantic_search_rag_chunks, _trim_context
+from services.rag import answer_with_context
 
 st.set_page_config(page_title="Dashboard", layout="wide")
 inject_css()
@@ -183,73 +183,6 @@ NOTES:
         return res.choices[0].message.content.strip()
     except Exception as e:
         return f"⚠️ OpenAI error: {e}"
-
-
-def build_context_from_rag(
-    question: str,
-    max_chars: int = 3200,
-    match_count: int = 12,
-    min_similarity: float = 0.1,
-):
-    """Pull contextual notes from ai.rag_chunks/public.leads for chat grounding."""
-    if not supabase or not question.strip():
-        return "", []
-    rows = []
-    # Primary: use ai.rag_chunks RPC
-    try:
-        rows = semantic_search_rag_chunks(
-            supabase,
-            query=question,
-            match_count=match_count,
-            min_similarity=min_similarity,
-        )
-    except Exception:
-        rows = []
-
-    # Fallback 1: semantic search on leads/leads_supplements
-    if not rows:
-        try:
-            emb = get_query_embedding_cached(question)
-            rpc = supabase.rpc(
-                "rpc_semantic_search_leads_supplements",
-                {
-                    "query_embedding": emb,
-                    "match_count": match_count,
-                    "min_score": min_similarity,
-                },
-            ).execute()
-            matched_ids = []
-            for r in rpc.data or []:
-                lid = r.get("lead_id")
-                if lid:
-                    matched_ids.append(str(lid))
-            if matched_ids:
-                res = (
-                    supabase.table("leads")
-                    .select("lead_id, full_name, city, country, notes")
-                    .in_("lead_id", matched_ids)
-                    .execute()
-                )
-                rows = res.data or []
-        except Exception:
-            rows = []
-
-    # Fallback 2: simple text search on notes when embeddings/rpc fail
-    if not rows:
-        try:
-            res = (
-                supabase.table("leads")
-                .select("lead_id, full_name, city, country, notes")
-                .ilike("notes", f"%{question}%")
-                .limit(match_count)
-                .execute()
-            )
-            rows = res.data or []
-        except Exception:
-            rows = []
-
-    context_text, used_rows = _trim_context(rows, max_chars=max_chars)
-    return context_text, used_rows
 
 tabs = st.tabs(["Search", "Contacts", "Saved Sets"])
 
@@ -521,77 +454,44 @@ with tabs[0]:
                         "content": user_input,
                     }
                 ).execute()
-
+                
             with st.spinner("Thinking..."):
                 try:
-                    context_text, used_chunks = build_context_from_rag(user_input)
-
-                    messages = [
-                        {
-                            "role": "system",
-                            "content": (
-                                system_prompt
-                                + " Use only the provided database context to answer. "
-                                "If no relevant context is available, say you could not find matching collectors."
-                            ),
-                        }
-                    ]
-
-                    if context_text:
-                        messages.append(
-                            {
-                                "role": "system",
-                                "content": (
-                                    "Database context from ai.rag_chunks and public.leads:\n"
-                                    f"{context_text}"
-                                ),
-                            }
-                        )
-                    else:
-                        messages.append(
-                            {
-                                "role": "system",
-                                "content": (
-                                    "No database context found for this query. "
-                                    "Respond that no matching collectors were found in the database."
-                                ),
-                            }
-                        )
-
-                    messages.extend(st.session_state.active_chat)
-
-                    if not context_text:
-                        response_text = (
-                            "I couldn't find matching collectors in the database for that query. "
-                            "Try refining names, artists, or locations."
-                        )
-                    else:
-                        completion = client.chat.completions.create(
-                            model="gpt-4o-mini",
-                            messages=messages,
-                            temperature=0.2,
-                            max_tokens=600,
-                        )
-
-                        response_text = completion.choices[0].message.content.strip()
-
+                    # Use unified RAG pipeline
+                    result = answer_with_context(
+                        supabase=supabase,
+                        question=user_input,
+                        system_prompt=system_prompt,
+                        match_count=10,
+                        min_similarity=0.12,
+                    )
+        
+                    response_text = result.get("answer", "").strip() or (
+                        "I couldn't find matching collectors in the database for that query. "
+                        "Try refining names, artists, or locations."
+                    )
+                    used_chunks = result.get("sources", []) or []
+        
+                    # Append assistant reply to chat state
                     st.session_state.active_chat.append(
                         {"role": "assistant", "content": response_text}
                     )
                     st.session_state.chat_sources = used_chunks
-
+        
+                    # Persist assistant message if a DB chat session is open
                     if st.session_state.current_chat_open and supabase:
                         supabase.table("chat_messages").insert(
-                    {
-                        "session_id": st.session_state.current_chat_open,
-                        "role": "assistant",
-                        "content": response_text,
-                        }
-                    ).execute()
-
+                            {
+                                "session_id": st.session_state.current_chat_open,
+                                "role": "assistant",
+                                "content": response_text,
+                            }
+                        ).execute()
+        
                     st.rerun()
                 except Exception as e:
                     st.error(f"Chat failed: {e}")
+  
 
         if st.session_state.active_chat:
             if st.button("New Chat", use_container_width=True, key="collector_chat_new"):
