@@ -96,6 +96,7 @@ def _trim_context(chunks: List[Dict[str, Any]], max_chars: int = 3500) -> Tuple[
             "chunk",
             "content",
             "text",
+            "content_text",
             "chunk_text",
             "body",
             "document",
