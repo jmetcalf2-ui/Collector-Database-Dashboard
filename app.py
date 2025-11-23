@@ -291,11 +291,11 @@ def build_context_from_rag(
     match_count: int = 12,
     min_similarity: float = 0.1,
 ):
-    """Pull contextual notes from ai.rag_chunks/public.leads for chat grounding."""
+    """Pull contextual notes from public.rag_chunks/public.leads for chat grounding."""
     if not supabase or not question.strip():
         return "", []
     rows = []
-    # Primary: use ai.rag_chunks RPC
+    # Primary: use public.rag_chunks RPC
     try:
         rows = semantic_search_rag_chunks(
             supabase,
@@ -379,36 +379,9 @@ with tabs[0]:
     with col5:
         role = st.text_input("Primary Role")
 
-    semantic_query = st.text_input("Semantic Search")
-    semantic_min_score = 0.35
-    semantic_max_matches = 80
-    min_semantic_chars = 8
-
-    def semantic_filter_passes(lead_row):
-        """Apply field-level filters to semantic results for extra precision."""
-        def contains(value, term):
-            return term.lower() in (value or "").lower()
-
-        if keyword and not (
-            contains(lead_row.get("full_name", ""), keyword)
-            or contains(lead_row.get("email", ""), keyword)
-            or contains(lead_row.get("primary_role", ""), keyword)
-        ):
-            return False
-        if city and not contains(lead_row.get("city", ""), city):
-            return False
-        if country and not contains(lead_row.get("country", ""), country):
-            return False
-        if tier and lead_row.get("tier") != tier:
-            return False
-        if role and not contains(lead_row.get("primary_role", ""), role):
-            return False
-        return True
-
     if (
         keyword.strip()=="" and city.strip()=="" and country.strip()=="" and
-        (tier=="" or tier is None) and role.strip()=="" and
-        semantic_query.strip()==""  
+        (tier=="" or tier is None) and role.strip()=="" 
     ):
         st.session_state["search_results"] = None
         st.session_state["search_page"] = 0
@@ -416,96 +389,27 @@ with tabs[0]:
     if st.button("Search Leads") and supabase:
         with st.spinner("Searching..."):
 
-            semantic_query_clean = semantic_query.strip()
+            try:
+                q = supabase.table("leads").select(
+                    "lead_id, full_name, email, tier, primary_role, city, country, notes"
+                )
+                if keyword:
+                    w = f"%{keyword}%"
+                    q = q.or_(f"full_name.ilike.{w},email.ilike.{w},primary_role.ilike.{w}")
+                if city:
+                    q = q.ilike("city", f"%{city}%")
+                if country:
+                    q = q.ilike("country", f"%{country}%")
+                if tier:
+                    q = q.eq("tier", tier)
+                if role:
+                    q = q.ilike("primary_role", f"%{role}%")
 
-            if semantic_query_clean:
-                if len(semantic_query_clean) < min_semantic_chars:
-                    st.warning("Please provide a more detailed semantic query (8+ characters) for accurate matches.")
-                    st.session_state["search_results"] = []
-                else:
-                    try:
-                        emb = get_query_embedding_cached(semantic_query_clean)
-                        rpc = supabase.rpc(
-                            "rpc_semantic_search_leads_supplements",
-                            {
-                                "query_embedding": emb,
-                                "match_count": semantic_max_matches,
-                                "min_score": semantic_min_score,
-                            },
-                        ).execute()
-                        rows = rpc.data or []
-
-                        def extract_score(row):
-                            for key in ("similarity", "score", "match_score", "distance"):
-                                val = row.get(key)
-                                if isinstance(val, (int, float)):
-                                    return float(val)
-                            return None
-
-                        scored_ids = []
-                        fallback_ids = []
-                        for r in rows:
-                            lid = r.get("lead_id")
-                            if not lid:
-                                continue
-                            fallback_ids.append(str(lid))
-                            score_val = extract_score(r)
-                            if score_val is not None and score_val >= semantic_min_score:
-                                scored_ids.append((str(lid), score_val))
-
-                        if scored_ids:
-                            scored_ids.sort(key=lambda x: x[1], reverse=True)
-                            lead_ids = [lid for lid, _ in scored_ids][:semantic_max_matches]
-                        else:
-                            lead_ids = list(dict.fromkeys(fallback_ids[:20]))
-
-                        if lead_ids:
-                            res = (
-                                supabase.table("leads")
-                                .select("lead_id, full_name, email, tier, primary_role, city, country, notes")
-                                .in_("lead_id", lead_ids)
-                                .execute()
-                            )
-                            raw_results = res.data or []
-                            score_lookup = {lid: score for lid, score in scored_ids}
-                            filtered_results = [
-                                r for r in raw_results if semantic_filter_passes(r)
-                            ]
-                            filtered_results.sort(
-                                key=lambda r: score_lookup.get(str(r.get("lead_id")), 0),
-                                reverse=True,
-                            )
-                            st.session_state["search_results"] = filtered_results
-                            if not filtered_results:
-                                st.info("No matches cleared the similarity threshold with the given filters. Try refining the query.")
-                        else:
-                            st.session_state["search_results"] = []
-                            st.info("No semantic matches above the accuracy threshold. Try adding more detail or different terms.")
-                    except Exception as e:
-                        st.error(f"Semantic search error: {e}")
-                        st.session_state["search_results"] = []
-
-            else:
-                try:
-                    q = supabase.table("leads").select(
-                        "lead_id, full_name, email, tier, primary_role, city, country, notes"
-                    )
-                    if keyword:
-                        w = f"%{keyword}%"
-                        q = q.or_(f"full_name.ilike.{w},email.ilike.{w},primary_role.ilike.{w}")
-                    if city:
-                        q = q.ilike("city", f"%{city}%")
-                    if country:
-                        q = q.ilike("country", f"%{country}%")
-                    if tier:
-                        q = q.eq("tier", tier)
-                    if role:
-                        q = q.ilike("primary_role", f"%{role}%")
-
-                    res = q.limit(2000).execute()
-                    st.session_state["search_results"] = res.data or []
-                except:
-                    st.session_state["search_results"] = []
+                res = q.limit(2000).execute()
+                st.session_state["search_results"] = res.data or []
+            except Exception as e:
+                st.error(f"Search error: {e}")
+                st.session_state["search_results"] = []
 
         st.session_state["search_page"] = 0
 
@@ -642,7 +546,7 @@ with tabs[0]:
                             {
                                 "role": "system",
                                 "content": (
-                                    "Database context from ai.rag_chunks and public.leads:\n"
+                                    "Database context from public.rag_chunks and public.leads:\n"
                                     f"{context_text}"
                                 ),
                             }
