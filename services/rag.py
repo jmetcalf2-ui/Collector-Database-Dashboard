@@ -4,7 +4,8 @@ import os
 from typing import List, Dict, Any, Tuple
 from openai import OpenAI
 
-DEFAULT_EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
+# ai.rag_chunks embeddings are 1536-dim vectors (text-embedding-3-small)
+DEFAULT_EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
 DEFAULT_CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
 
 
@@ -37,7 +38,7 @@ def semantic_search_rag_chunks(
     Assumes you have this SQL function in Supabase:
 
         create or replace function ai.match_rag_chunks(
-            query_embedding vector(3072),
+            query_embedding vector(1536),
             match_count int default 10,
             min_similarity float default 0.15
         )
