@@ -185,6 +185,106 @@ NOTES:
         return f"⚠️ OpenAI error: {e}"
 
 
+@st.cache_data(show_spinner=False)
+def load_lead_supplements(lead_id: str):
+    """Cached fetch of supplemental notes for a lead to avoid repeated round-trips."""
+    if not supabase:
+        return []
+    try:
+        res = (
+            supabase.table("leads_supplements")
+            .select("notes")
+            .eq("lead_id", lead_id)
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
+
+
+def prefetch_page(cache_fn, page: int, per_page: int, direction: int = 1):
+    """
+    Warm the cache for an adjacent page so pagination feels instant.
+    """
+    target = page + direction
+    if target < 0:
+        return
+    try:
+        cache_fn(target, per_page)
+    except Exception:
+        pass
+
+
+def render_lead_detail(lead, summary_prefix: str):
+    """Single detail pane for a lead to reduce re-render load."""
+    lead_id = str(lead.get("lead_id"))
+    name = lead.get("full_name", "Unnamed")
+    role_val = lead.get("primary_role", "—")
+    tier_val = lead.get("tier", "—")
+    city_val = (lead.get("city") or "").strip()
+    country_val = (lead.get("country") or "").strip()
+    email_val = lead.get("email", "—")
+    notes_val = (lead.get("notes") or "").strip()
+
+    location = ", ".join([p for p in [city_val, country_val] if p]) or "—"
+
+    st.markdown(f"### {name}")
+    st.caption(f"{role_val} • Tier {tier_val} • {location}")
+    st.write(email_val)
+
+    if notes_val:
+        st.markdown("**Notes**")
+        st.write(notes_val)
+
+    summary_key = f"summary_{summary_prefix}_{lead_id}"
+    if summary_key not in st.session_state:
+        if st.button(
+            f"Summarize {name}",
+            key=f"sum_{summary_prefix}_{lead_id}",
+            use_container_width=True,
+        ):
+            with st.spinner("Summarizing notes..."):
+                supplements = load_lead_supplements(lead_id)
+                supplement_notes = "\n\n".join(
+                    (s.get("notes") or "").strip() for s in supplements
+                )
+
+                combined = (
+                    notes_val
+                    + ("\n\n" if notes_val and supplement_notes else "")
+                    + supplement_notes
+                ).strip()
+
+                client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                prompt = f"""
+Summarize these collector notes into 5–7 factual bullet points.
+Avoid adjectives. Focus on artists collected, museum affiliations, geography,
+philanthropy, acquisitions, and collecting tendencies.
+
+NOTES:
+{combined}
+"""
+
+                resp = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You summarize art collectors factually.",
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0.2,
+                    max_tokens=500,
+                )
+
+                st.session_state[summary_key] = resp.choices[0].message.content.strip()
+                st.rerun()
+    else:
+        st.markdown("**Summary**")
+        st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+
+
 def build_context_from_rag(
     question: str,
     max_chars: int = 3200,
@@ -622,86 +722,62 @@ with tabs[0]:
         total_pages = max(1, (total_full + per_page - 1) // per_page)
 
         leads = get_full_grid_page(st.session_state.full_grid_page, per_page)
+        prefetch_page(get_full_grid_page, st.session_state.full_grid_page, per_page)
 
         st.write(f"Showing {len(leads)} of {total_full} collectors")
 
-        left_col, right_col = st.columns(2)
+        if leads:
+            df = pd.DataFrame(leads)
+            if not df.empty:
+                df["location"] = df.apply(
+                    lambda r: ", ".join(
+                        [p for p in [str(r.get("city") or "").strip(), str(r.get("country") or "").strip()] if p]
+                    ),
+                    axis=1,
+                )
+                cols = [
+                    "full_name",
+                    "location",
+                    "primary_role",
+                    "tier",
+                    "email",
+                    "notes",
+                ]
+                existing_cols = [c for c in cols if c in df.columns]
+                df_display = df[existing_cols].copy()
+                if "notes" in df_display.columns:
+                    df_display["notes"] = df_display["notes"].fillna("").apply(
+                        lambda x: (x[:160] + "…") if len(x) > 160 else x
+                    )
+                st.dataframe(
+                    df_display,
+                    use_container_width=True,
+                    height=520,
+                )
 
-        for i, lead in enumerate(leads):
-            col = left_col if i % 2 == 0 else right_col
+            lead_options = [str(r.get("lead_id")) for r in leads if r.get("lead_id")]
+            name_lookup = {str(r.get("lead_id")): r.get("full_name", "Unnamed") for r in leads}
+            default_id = st.session_state.get("active_full_lead") or (lead_options[0] if lead_options else None)
+            if lead_options and default_id not in lead_options:
+                default_id = lead_options[0]
 
-            name = lead.get("full_name", "Unnamed")
-            city_val = (lead.get("city") or "").strip()
-            label = f"{name} — {city_val}" if city_val else name
-            lead_id = str(lead.get("lead_id"))
+            selected_lead_id = st.selectbox(
+                "Open collector",
+                options=lead_options,
+                index=lead_options.index(default_id) if lead_options and default_id else 0,
+                format_func=lambda lid: name_lookup.get(lid, lid),
+                key="full_detail_selector",
+            ) if lead_options else None
 
-            with col:
-                with st.expander(label):
-                    tier_val = lead.get("tier", "—")
-                    role_val = lead.get("primary_role", "—")
-                    email_val = lead.get("email", "—")
-                    country_val = (lead.get("country") or "").strip()
-
-                    if city_val or country_val:
-                        st.caption(f"{city_val}, {country_val}".strip(", "))
-                    st.caption(f"{role_val} | Tier {tier_val}")
-                    st.write(email_val)
-
-                    sum_col, _ = st.columns([3, 1])
-                    summary_key = f"summary_{lead_id}"
-
-                    with sum_col:
-                        if summary_key not in st.session_state:
-                            if st.button(f"Summarize {name}", key=f"sum_full_{lead_id}"):
-                                with st.spinner("Summarizing notes..."):
-                                    supplements = (
-                                        supabase.table("leads_supplements")
-                                        .select("notes")
-                                        .eq("lead_id", lead_id)
-                                        .execute()
-                                        .data
-                                        or []
-                                    )
-
-                                    base_notes = lead.get("notes") or ""
-                                    supplement_notes = "\n\n".join(
-                                        (s.get("notes") or "").strip()
-                                        for s in supplements
-                                    )
-
-                                    combined = (
-                                        base_notes
-                                        + ("\n\n" if base_notes and supplement_notes else "")
-                                        + supplement_notes
-                                    ).strip()
-
-                                    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                                    prompt = f"""
-Summarize these collector notes into 5–7 factual bullet points.
-Avoid adjectives. Focus on artists collected, museum affiliations, geography,
-philanthropy, acquisitions, and collecting tendencies.
-
-NOTES:
-{combined}
-"""
-
-                                    resp = client.chat.completions.create(
-                                        model="gpt-4o-mini",
-                                        messages=[
-                                            {"role": "system", "content": "You summarize art collectors factually."},
-                                            {"role": "user", "content": prompt},
-                                        ],
-                                        temperature=0.2,
-                                        max_tokens=500,
-                                    )
-
-                                    st.session_state[summary_key] = (
-                                        resp.choices[0].message.content.strip()
-                                    )
-                                    st.rerun()
-                        else:
-                            st.markdown("**Summary:**")
-                            st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+            if selected_lead_id:
+                st.session_state["active_full_lead"] = selected_lead_id
+                selected_lead = next(
+                    (r for r in leads if str(r.get("lead_id")) == selected_lead_id),
+                    None,
+                )
+                if selected_lead:
+                    with st.container():
+                        render_lead_detail(selected_lead, summary_prefix="full")
 
         col_space_left, prev_col, next_col, col_space_right = st.columns([2, 1, 1, 2])
         with prev_col:
@@ -735,77 +811,62 @@ NOTES:
 
         st.write(f"Showing {len(page_results)} of {total_results} results")
 
-        left_col, right_col = st.columns(2)
+        if page_results:
+            df = pd.DataFrame(page_results)
+            if not df.empty:
+                df["location"] = df.apply(
+                    lambda r: ", ".join(
+                        [p for p in [str(r.get("city") or "").strip(), str(r.get("country") or "").strip()] if p]
+                    ),
+                    axis=1,
+                )
+                display_cols = [
+                    "full_name",
+                    "location",
+                    "primary_role",
+                    "tier",
+                    "email",
+                    "notes",
+                ]
+                existing_cols = [c for c in display_cols if c in df.columns]
+                df_display = df[existing_cols].copy()
+                if "notes" in df_display.columns:
+                    df_display["notes"] = df_display["notes"].fillna("").apply(
+                        lambda x: (x[:160] + "…") if len(x) > 160 else x
+                    )
+                st.dataframe(
+                    df_display,
+                    use_container_width=True,
+                    height=520,
+                )
 
-        for i, lead in enumerate(page_results):
-            col = left_col if i % 2 == 0 else right_col
-            lead_id = str(lead.get("lead_id"))
+            lead_options = [str(r.get("lead_id")) for r in page_results if r.get("lead_id")]
+            name_lookup = {
+                str(r.get("lead_id")): r.get("full_name", "Unnamed") for r in page_results
+            }
+            default_id = st.session_state.get("active_search_lead") or (lead_options[0] if lead_options else None)
+            if lead_options and default_id not in lead_options:
+                default_id = lead_options[0]
 
-            name = lead.get("full_name", "Unnamed")
-            city_val = (lead.get("city") or "").strip()
-            label = f"{name} — {city_val}" if city_val else name
+            selected_lead_id = st.selectbox(
+                "Open collector",
+                options=lead_options,
+                index=lead_options.index(default_id) if lead_options and default_id else 0,
+                format_func=lambda lid: name_lookup.get(lid, lid),
+                key="search_detail_selector",
+            ) if lead_options else None
 
-            with col:
-                with st.expander(label):
-                    st.markdown(f"**{name}**")
-                    st.caption(f"{lead.get('primary_role', '—')} | Tier {lead.get('tier', '—')}")
-                    st.write(lead.get("email", "—"))
-
-                    sum_col, _ = st.columns([3, 1])
-                    summary_key = f"summary_{lead_id}"
-
-                    with sum_col:
-                        if summary_key not in st.session_state:
-                            if st.button(f"Summarize {name}", key=f"sum_search_{lead_id}"):
-                                with st.spinner("Summarizing notes..."):
-                                    supplements = (
-                                        supabase.table("leads_supplements")
-                                        .select("notes")
-                                        .eq("lead_id", lead_id)
-                                        .execute()
-                                        .data
-                                        or []
-                                    )
-
-                                    base_notes = lead.get("notes") or ""
-                                    supplement_notes = "\n\n".join(
-                                        (s.get("notes") or "").strip()
-                                        for s in supplements
-                                    )
-
-                                    combined = (
-                                        base_notes
-                                        + ("\n\n" if base_notes and supplement_notes else "")
-                                        + supplement_notes
-                                    ).strip()
-
-                                    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                                    prompt = f"""
-Summarize these collector notes into 5–7 factual bullet points.
-Avoid adjectives. Focus on artists collected, museum affiliations, geography,
-philanthropy, acquisitions, and collecting tendencies.
-
-NOTES:
-{combined}
-"""
-
-                                    resp = client.chat.completions.create(
-                                        model="gpt-4o-mini",
-                                        messages=[
-                                            {"role": "system", "content": "You summarize art collectors factually."},
-                                            {"role": "user", "content": prompt},
-                                        ],
-                                        temperature=0.2,
-                                        max_tokens=500,
-                                    )
-
-                                    st.session_state[summary_key] = (
-                                        resp.choices[0].message.content.strip()
-                                    )
-                                    st.rerun()
-                        else:
-                            st.markdown("**Summary:**")
-                            st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
+            if selected_lead_id:
+                st.session_state["active_search_lead"] = selected_lead_id
+                selected_lead = next(
+                    (r for r in page_results if str(r.get("lead_id")) == selected_lead_id),
+                    None,
+                )
+                if selected_lead:
+                    with st.container():
+                        render_lead_detail(selected_lead, summary_prefix="search")
+        else:
+            st.info("No results on this page.")
 
         prev_col, next_col = st.columns([1, 1])
         with prev_col:
@@ -919,6 +980,7 @@ with tabs[1]:
         )
 
         leads = get_contacts_page(st.session_state.data_page, per_page)
+        prefetch_page(get_contacts_page, st.session_state.data_page, per_page)
 
         if leads:
             df = pd.DataFrame(leads)
