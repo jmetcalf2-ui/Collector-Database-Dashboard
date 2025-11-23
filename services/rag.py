@@ -30,7 +30,7 @@ def semantic_search_rag_chunks(
     supabase,
     query: str,
     match_count: int = 10,
-    min_similarity: float = 0.15,
+    min_similarity: float = 0.08,
     embedding_model: str | None = None,
 ) -> List[Dict[str, Any]]:
     """
@@ -69,20 +69,24 @@ def semantic_search_rag_chunks(
     """
     qvec = embed_query(query, model=embedding_model)
 
-    # ✅ Fixed: remove deprecated schema param and use fully qualified name
-    res = supabase.rpc(
-        "ai.match_rag_chunks",
-        {
-            "query_embedding": qvec,
-            "match_count": match_count,
-            "min_similarity": min_similarity,
-        },
-    ).execute()
+    rpc_payload = {
+        "query_embedding": qvec,
+        "match_count": match_count,
+        "min_similarity": min_similarity,
+    }
 
-    # Handle null or empty response safely
-    if not res or not getattr(res, "data", None):
-        return []
-    return res.data or []
+    # Try common RPC names (with/without schema) in case the function was created differently.
+    for fn in ("ai.match_rag_chunks", "match_rag_chunks"):
+        try:
+            res = supabase.rpc(fn, rpc_payload).execute()
+            if res and getattr(res, "data", None):
+                return res.data or []
+        except Exception:
+            # Try the next fallback name
+            continue
+
+    # Nothing returned
+    return []
 
 
 def _trim_context(chunks: List[Dict[str, Any]], max_chars: int = 3500) -> Tuple[str, List[Dict[str, Any]]]:
