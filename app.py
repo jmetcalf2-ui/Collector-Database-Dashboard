@@ -433,7 +433,7 @@ with tabs[0]:
                     snippet = snippet[:157] + "..."
                 st.caption(f"{i+1}. {name}")
                 if snippet:
-                    st.caption(f"   "{snippet}"")
+                    st.caption(f'   "{snippet}"')
 
         user_input = st.chat_input(placeholder="Ask about collectors, artists, or the art market...", key="collector_chat_bar")
 
