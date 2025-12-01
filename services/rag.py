@@ -34,45 +34,44 @@ def semantic_search_rag_chunks(
     embedding_model: str | None = None,
 ) -> List[Dict[str, Any]]:
     """
-    Run a similarity search against public.rag_chunks via RPC, fall back to text search.
+    Run a similarity search against public.rag_chunks via RPC.
     """
     qvec = embed_query(query, model=embedding_model)
 
-    rpc_payload = {
-        "query_embedding": qvec,
-        "match_count": match_count,
-        "min_similarity": min_similarity,
-    }
-
-    # Try common RPC function names
-    for fn in (
-        "public.match_rag_chunks",
-        "match_public_rag_chunks",
-        "match_rag_chunks",
-        "ai.match_rag_chunks",  # legacy
-    ):
-        try:
-            res = supabase.rpc(fn, rpc_payload).execute()
-            if res and getattr(res, "data", None):
-                return res.data or []
-        except Exception:
-            continue
-
-    # Fallback: text search
     try:
-        res = (
-            supabase.table("rag_chunks")
-            .select("lead_id, full_name, city, country, notes, chunk_text, content, text")
-            .or_(
-                f"notes.ilike.%{query}%,chunk_text.ilike.%{query}%,text.ilike.%{query}%"
+        # Call the RPC function
+        res = supabase.rpc(
+            "match_rag_chunks",
+            {
+                "query_embedding": qvec,
+                "match_count": match_count,
+                "min_similarity": min_similarity,
+            }
+        ).execute()
+        
+        if res and res.data:
+            print(f"✓ Found {len(res.data)} chunks with similarity > {min_similarity}")
+            return res.data
+        else:
+            print(f"✗ No chunks found above similarity threshold {min_similarity}")
+            return []
+            
+    except Exception as e:
+        print(f"✗ RPC call failed: {e}")
+        # Fallback to simple text search
+        try:
+            res = (
+                supabase.table("rag_chunks")
+                .select("chunk_id, lead_id, full_name, chunk_text, source_url, source_title")
+                .ilike("chunk_text", f"%{query}%")
+                .limit(match_count)
+                .execute()
             )
-            .limit(match_count)
-            .execute()
-        )
-        return res.data or []
-    except Exception:
-        return []
-
+            print(f"✓ Fallback text search found {len(res.data or [])} results")
+            return res.data or []
+        except Exception as fallback_error:
+            print(f"✗ Fallback also failed: {fallback_error}")
+            return []
 
 def _trim_context(
     chunks: List[Dict[str, Any]], max_chars: int = 3500
@@ -83,8 +82,8 @@ def _trim_context(
     def extract_text(row: Dict[str, Any]) -> str:
         # Recognize the column your database actually uses: chunk_text
         preferred_keys = (
+            "chunk_text",
             "notes",
-            "chunk_text",  # 👈 critical addition
             "chunk",
             "content",
             "text",
@@ -99,7 +98,7 @@ def _trim_context(
                 return val.strip()
 
         # Last fallback: any long-ish string that isn't metadata
-        skip = {"full_name", "city", "country", "lead_id", "id", "similarity", "chunk_id"}
+        skip = {"full_name", "lead_id", "chunk_id", "id", "similarity", "source_url", "source_title"}
         for key, val in row.items():
             if key in skip:
                 continue
@@ -118,11 +117,8 @@ def _trim_context(
         if not piece:
             continue
 
-        # Build contextual entry
-        entry = (
-            f"{row.get('full_name', 'Unknown')} "
-            f"({row.get('city', '')}, {row.get('country', '')}):\n{piece}"
-        )
+        # Build contextual entry without city/country since they're not in rag_chunks
+        entry = f"{row.get('full_name', 'Unknown')}:\n{piece}"
 
         if total + len(entry) + 2 > max_chars:
             break
@@ -132,7 +128,6 @@ def _trim_context(
         used.append(row)
 
     return "\n\n".join(buf), used
-
 
 def answer_with_context(
     supabase,
