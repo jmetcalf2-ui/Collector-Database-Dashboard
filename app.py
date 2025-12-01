@@ -342,15 +342,16 @@ with tabs[0]:
 
         st.session_state["search_page"] = 0
 
-    # Divider between search controls and chat
+    # ------------------------------
+    # AI CHAT INTERFACE
+    # ------------------------------
     st.markdown("---")
-
-    # ------------------------------
-    # Inline AI chat bar (no labels)
-    # ------------------------------
+    st.markdown("### 💬 AI Assistant")
+    st.caption("Ask about collectors, artists, movements, or the art market")
+    
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        st.warning("Set OPENAI_API_KEY to use the AI chat.")
+        st.warning("⚠️ Set OPENAI_API_KEY to use the AI chat.")
     else:
         system_prompt_path = Path("prompts/system_prompt.md")
         if system_prompt_path.exists():
@@ -366,79 +367,78 @@ with tabs[0]:
         if st.session_state.current_chat_open and supabase:
             st.session_state.chat_sessions = load_chat_sessions()
 
+        # Chat history container with fixed height and scroll
         if st.session_state.active_chat:
-            st.markdown(
-                """
-                <div style="
-                    border:1px solid #e0e0e0;
-                    border-radius:12px;
-                    padding:12px;
-                    margin:12px 0 8px;
-                    background-color:#fafafa;
-                    overflow:hidden;">
-                """,
-                unsafe_allow_html=True,
-            )
-
-        for msg in st.session_state.active_chat:
-            if msg["role"] == "user":
-                st.markdown(
-                    f"""
+            st.markdown("""
+            <div style="
+                max-height: 500px;
+                overflow-y: auto;
+                border: 1px solid #e0e0e0;
+                border-radius: 12px;
+                padding: 16px;
+                background-color: #fafafa;
+                margin: 16px 0;">
+            """, unsafe_allow_html=True)
+            
+            for msg in st.session_state.active_chat:
+                if msg["role"] == "user":
+                    st.markdown(f"""
                     <div style="
-                        background-color:#f5f5f5;
-                        padding:10px 14px;
-                        border-radius:12px;
-                        margin:6px 0;
-                        text-align:right;
-                        max-width:75%;
-                        float:right;
-                        clear:both;">
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        padding: 12px 16px;
+                        border-radius: 18px;
+                        margin: 8px 0 8px auto;
+                        max-width: 80%;
+                        width: fit-content;
+                        float: right;
+                        clear: both;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        font-size: 14px;">
                         {msg["content"]}
                     </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    f"""
+                    """, unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
                     <div style="
-                        background-color:#ffffff;
-                        padding:10px 14px;
-                        border-radius:12px;
-                        margin:6px 0;
-                        text-align:left;
-                        max-width:75%;
-                        float:left;
-                        clear:both;">
+                        background-color: white;
+                        padding: 12px 16px;
+                        border-radius: 18px;
+                        margin: 8px auto 8px 0;
+                        max-width: 80%;
+                        width: fit-content;
+                        float: left;
+                        clear: both;
+                        border: 1px solid #e0e0e0;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                        font-size: 14px;
+                        line-height: 1.6;">
                         {msg["content"]}
                     </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-        if st.session_state.active_chat:
+                    """, unsafe_allow_html=True)
+            
             st.markdown("<div style='clear:both;'></div></div>", unsafe_allow_html=True)
-        else:
-            st.markdown("<div style='clear:both;'></div>", unsafe_allow_html=True)
-
+        
+        # Sources section - collapsible
         if st.session_state.chat_sources:
-            st.markdown(
-                "###### Sources used",
-                unsafe_allow_html=True,
-            )
-            for i, src in enumerate(st.session_state.chat_sources[:5]):
-                name = src.get("full_name") or "Unknown"
-                city = (src.get("city") or "").strip()
-                country = (src.get("country") or "").strip()
-                loc = ", ".join([p for p in [city, country] if p])
-                snippet = (src.get("notes") or "").strip()
-                if len(snippet) > 160:
-                    snippet = snippet[:157] + "..."
-                st.caption(f"{i+1}. {name}" + (f" — {loc}" if loc else ""))
-                if snippet:
-                    st.caption(f"   “{snippet}”")
+            with st.expander("📚 View Sources", expanded=False):
+                for i, src in enumerate(st.session_state.chat_sources[:5], 1):
+                    name = src.get("full_name") or "Unknown"
+                    snippet = (src.get("chunk_text") or "").strip()
+                    if len(snippet) > 200:
+                        snippet = snippet[:197] + "..."
+                    
+                    st.markdown(f"**{i}. {name}**")
+                    if snippet:
+                        st.caption(f"_{snippet}_")
+                    if i < len(st.session_state.chat_sources[:5]):
+                        st.markdown("---")
 
-        user_input = st.chat_input(placeholder="Ask about collectors, artists, or the art market...", key="collector_chat_bar")
+        # Chat input
+        user_input = st.chat_input(
+            placeholder="Ask about collectors, artists, or the art market...",
+            key="collector_chat_bar"
+        )
 
         if user_input:
             st.session_state.active_chat.append(
@@ -455,9 +455,8 @@ with tabs[0]:
                     }
                 ).execute()
                 
-            with st.spinner("Thinking..."):
+            with st.spinner("🤔 Thinking..."):
                 try:
-                    # Use unified RAG pipeline
                     result = answer_with_context(
                         supabase=supabase,
                         question=user_input,
@@ -472,13 +471,11 @@ with tabs[0]:
                     )
                     used_chunks = result.get("sources", []) or []
         
-                    # Append assistant reply to chat state
                     st.session_state.active_chat.append(
                         {"role": "assistant", "content": response_text}
                     )
                     st.session_state.chat_sources = used_chunks
         
-                    # Persist assistant message if a DB chat session is open
                     if st.session_state.current_chat_open and supabase:
                         supabase.table("chat_messages").insert(
                             {
@@ -490,19 +487,19 @@ with tabs[0]:
         
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Chat failed: {e}")
-  
+                    st.error(f"❌ Chat failed: {e}")
 
+        # New Chat button
         if st.session_state.active_chat:
-            if st.button("New Chat", use_container_width=True, key="collector_chat_new"):
-                st.session_state.active_chat = []
-                st.session_state.current_chat_open = None
-                st.session_state.current_session_summary = ""
-                st.session_state.current_session_title = ""
-                st.rerun()
-
-    # Divider between chat and results grid
-    st.markdown("---")
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                if st.button("🔄 New Chat", use_container_width=True, key="collector_chat_new"):
+                    st.session_state.active_chat = []
+                    st.session_state.current_chat_open = None
+                    st.session_state.current_session_summary = ""
+                    st.session_state.current_session_title = ""
+                    st.session_state.chat_sources = []
+                    st.rerun()
 
     # ==========================================
     # SHOW SEARCH OR FULL GRID
