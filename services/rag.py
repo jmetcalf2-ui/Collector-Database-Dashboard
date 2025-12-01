@@ -73,6 +73,7 @@ def semantic_search_rag_chunks(
             print(f"✗ Fallback also failed: {fallback_error}")
             return []
 
+
 def _trim_context(
     chunks: List[Dict[str, Any]], max_chars: int = 3500
 ) -> Tuple[str, List[Dict[str, Any]]]:
@@ -128,6 +129,7 @@ def _trim_context(
         used.append(row)
 
     return "\n\n".join(buf), used
+
 
 def answer_with_context(
     supabase,
