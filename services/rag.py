@@ -133,8 +133,8 @@ def answer_with_context(
     supabase,
     question: str,
     system_prompt: str,
-    match_count: int = 10,
-    min_similarity: float = 0.15,
+    match_count: int = 20,
+    min_similarity: float = 0.10,
     chat_model: str | None = None,
     embedding_model: str | None = None,
     max_context_chars: int = 3500,
@@ -157,13 +157,25 @@ def answer_with_context(
     # 3. Build GPT prompt
     client = _get_openai()
     mdl = chat_model or DEFAULT_CHAT_MODEL
+    
+    # Enhanced system prompt
+    enhanced_system = (
+        f"{system_prompt}\n\n"
+        "IMPORTANT: When answering about collectors:\n"
+        "- List specific collector names from the context\n"
+        "- Explain WHY each collector would be interested based on their documented history\n"
+        "- Reference specific artists, movements, or institutions they support\n"
+        "- Be concrete and factual - avoid generalizations"
+    )
+    
     messages = [
-        {"role": "system", "content": system_prompt},
+        {"role": "system", "content": enhanced_system},
         {
             "role": "user",
             "content": (
-                "Answer the question below using only the provided context.\n\n"
-                f"Context:\n{context_text}\n\nQuestion:\n{question}"
+                "Answer using ONLY the collectors mentioned in the context below.\n\n"
+                f"Context:\n{context_text}\n\n"
+                f"Question:\n{question}"
             ),
         },
     ]
