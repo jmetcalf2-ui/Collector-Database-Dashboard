@@ -462,8 +462,8 @@ with tabs[0]:
                         supabase=supabase,
                         question=user_input,
                         system_prompt=system_prompt,
-                        match_count=10,
-                        min_similarity=0.12,
+                        match_count=20,
+                        min_similarity=0.10,
                     )
         
                     response_text = result.get("answer", "").strip() or (
