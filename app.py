@@ -342,6 +342,8 @@ with tabs[0]:
 
         st.session_state["search_page"] = 0
 
+    st.markdown("<hr>", unsafe_allow_html=True)
+
     # ------------------------------
     # Inline AI chat bar (no labels)
     # ------------------------------
@@ -462,10 +464,7 @@ with tabs[0]:
             placeholder="Ask about collectors, artists, or the art market...",
             key="collector_chat_bar",
         )
-
-        st.markdown("<hr>", unsafe_allow_html=True)
-        # then chat input renders after it
-
+    
         if user_input:
             st.session_state.active_chat.append(
                 {"role": "user", "content": user_input}
