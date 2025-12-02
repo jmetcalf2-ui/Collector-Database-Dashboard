@@ -352,6 +352,28 @@ with tabs[0]:
     if not api_key:
         st.warning("Set OPENAI_API_KEY to use the AI chat.")
     else:
+        # --- One-time CSS for chat alignment + removing heavy chat divider look ---
+        if "collector_chat_css" not in st.session_state:
+            st.session_state.collector_chat_css = True
+            st.markdown(
+                """
+                <style>
+                /* Soften / remove the heavy chat-input "divider" look */
+                div[data-testid="stChatInput"] > div {
+                    box-shadow: none !important;
+                    border: 1px solid #e0e0e0 !important;
+                    border-radius: 8px !important;
+                    background: #ffffff !important;
+                }
+                /* Optional: tighten the vertical gap above the chat input */
+                div[data-testid="stChatInput"] {
+                    margin-top: 0.5rem !important;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+    
         system_prompt_path = Path("prompts/system_prompt.md")
         if system_prompt_path.exists():
             system_prompt = system_prompt_path.read_text().strip()
@@ -360,13 +382,17 @@ with tabs[0]:
                 "You are an art-market specialist AI. "
                 "Use concise, factual reasoning and stay on collectors, artists, museums, and art-market dynamics."
             )
-
+    
         client = OpenAI(api_key=api_key)
-
+    
         if st.session_state.current_chat_open and supabase:
             st.session_state.chat_sessions = load_chat_sessions()
-
+    
+        # ------------------------------
+        # Chat history display
+        # ------------------------------
         if st.session_state.active_chat:
+            # Outer card wrapper
             st.markdown(
                 """
                 <div style="
@@ -374,58 +400,52 @@ with tabs[0]:
                     border-radius:12px;
                     padding:12px;
                     margin:12px 0 8px;
-                    background-color:#fafafa;
-                    overflow:hidden;">
+                    background-color:#fafafa;">
                 """,
                 unsafe_allow_html=True,
             )
-
-        for msg in st.session_state.active_chat:
-            if msg["role"] == "user":
+    
+            # Each message as a flex row so alignment is consistent
+            for msg in st.session_state.active_chat:
+                is_user = msg["role"] == "user"
+                justify = "flex-end" if is_user else "flex-start"
+                bg = "#f5f5f5" if is_user else "#ffffff"
+                align = "right" if is_user else "left"
+    
                 st.markdown(
                     f"""
                     <div style="
-                        background-color:#f5f5f5;
-                        padding:10px 14px;
-                        border-radius:12px;
-                        margin:6px 0;
-                        text-align:right;
-                        max-width:75%;
-                        float:right;
-                        clear:both;">
-                        {msg["content"]}
+                        display:flex;
+                        justify-content:{justify};
+                        margin:6px 0;">
+                        <div style="
+                            background-color:{bg};
+                            padding:10px 14px;
+                            border-radius:12px;
+                            max-width:75%;
+                            border:1px solid #e0e0e0;
+                            text-align:{align};
+                            font-size:0.95rem;
+                            line-height:1.5;">
+                            {msg["content"]}
+                        </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-            else:
-                st.markdown(
-                    f"""
-                    <div style="
-                        background-color:#ffffff;
-                        padding:10px 14px;
-                        border-radius:12px;
-                        margin:6px 0;
-                        text-align:left;
-                        max-width:75%;
-                        float:left;
-                        clear:both;">
-                        {msg["content"]}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-        if st.session_state.active_chat:
-            st.markdown("<div style='clear:both;'></div></div>", unsafe_allow_html=True)
+    
+            # Close outer wrapper
+            st.markdown("</div>", unsafe_allow_html=True)
+    
         else:
+            # No chat yet – just make sure layout is cleared
             st.markdown("<div style='clear:both;'></div>", unsafe_allow_html=True)
-
-        if st.session_state.chat_sources:
-            st.markdown(
-                "###### Sources used",
-                unsafe_allow_html=True,
-            )
+    
+        # ------------------------------
+        # Sources used (only if there is an active chat)
+        # ------------------------------
+        if st.session_state.active_chat and st.session_state.chat_sources:
+            st.markdown("###### Sources used", unsafe_allow_html=True)
             for i, src in enumerate(st.session_state.chat_sources[:5]):
                 name = src.get("full_name") or "Unknown"
                 city = (src.get("city") or "").strip()
@@ -437,15 +457,22 @@ with tabs[0]:
                 st.caption(f"{i+1}. {name}" + (f" — {loc}" if loc else ""))
                 if snippet:
                     st.caption(f"   “{snippet}”")
-
-        user_input = st.chat_input(placeholder="Ask about collectors, artists, or the art market...", key="collector_chat_bar")
-
+    
+        # ------------------------------
+        # Chat input
+        # ------------------------------
+        user_input = st.chat_input(
+            placeholder="Ask about collectors, artists, or the art market...",
+            key="collector_chat_bar",
+        )
+    
         if user_input:
             st.session_state.active_chat.append(
                 {"role": "user", "content": user_input}
             )
+            # Clear sources for the new turn (you already had this line)
             st.session_state.chat_sources = []
-
+    
             if st.session_state.current_chat_open and supabase:
                 supabase.table("chat_messages").insert(
                     {
@@ -454,7 +481,7 @@ with tabs[0]:
                         "content": user_input,
                     }
                 ).execute()
-                
+    
             with st.spinner("Thinking..."):
                 try:
                     # Use unified RAG pipeline
@@ -465,19 +492,19 @@ with tabs[0]:
                         match_count=20,
                         min_similarity=0.10,
                     )
-        
+    
                     response_text = result.get("answer", "").strip() or (
                         "I couldn't find matching collectors in the database for that query. "
                         "Try refining names, artists, or locations."
                     )
                     used_chunks = result.get("sources", []) or []
-        
+    
                     # Append assistant reply to chat state
                     st.session_state.active_chat.append(
                         {"role": "assistant", "content": response_text}
                     )
                     st.session_state.chat_sources = used_chunks
-        
+    
                     # Persist assistant message if a DB chat session is open
                     if st.session_state.current_chat_open and supabase:
                         supabase.table("chat_messages").insert(
@@ -487,15 +514,18 @@ with tabs[0]:
                                 "content": response_text,
                             }
                         ).execute()
-        
+    
                     st.rerun()
                 except Exception as e:
                     st.error(f"Chat failed: {e}")
-  
-
+    
+        # ------------------------------
+        # New Chat button
+        # ------------------------------
         if st.session_state.active_chat:
             if st.button("New Chat", use_container_width=True, key="collector_chat_new"):
                 st.session_state.active_chat = []
+                st.session_state.chat_sources = []          # ← clear sources too
                 st.session_state.current_chat_open = None
                 st.session_state.current_session_summary = ""
                 st.session_state.current_session_title = ""
