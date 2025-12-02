@@ -6,10 +6,7 @@ from openai import OpenAI
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
-import re
-import requests
 from services.rag import answer_with_context
-
 
 st.set_page_config(page_title="Dashboard", layout="wide")
 inject_css()
@@ -52,10 +49,6 @@ if "current_session_title" not in st.session_state:
     st.session_state.current_session_title = ""
 if "current_session_summary" not in st.session_state:
     st.session_state.current_session_summary = ""
-if 'email_searches' not in st.session_state:
-    st.session_state.email_searches = []
-if 'verified_emails' not in st.session_state:
-    st.session_state.verified_emails = []
 
 st.markdown("""
 <style>
@@ -191,26 +184,7 @@ NOTES:
     except Exception as e:
         return f"⚠️ OpenAI error: {e}"
 
-# Helper functions for Research tab
-def extract_domain(url):
-    """Extract domain from URL"""
-    pattern = r'(?:https?://)?(?:www\.)?([^/]+)'
-    match = re.search(pattern, url)
-    return match.group(1) if match else url
-
-def generate_email_patterns(domain, first_name, last_name):
-    """Generate common email patterns"""
-    patterns = [
-        f"{first_name.lower()}.{last_name.lower()}@{domain}",
-        f"{first_name.lower()}{last_name.lower()}@{domain}",
-        f"{first_name[0].lower()}{last_name.lower()}@{domain}",
-        f"{first_name.lower()}@{domain}",
-        f"{last_name.lower()}@{domain}",
-        f"{first_name[0].lower()}.{last_name.lower()}@{domain}",
-    ]
-    return patterns
-
-tabs = st.tabs(["Search", "Contacts", "Saved Sets", "Research"])
+tabs = st.tabs(["Search", "Contacts", "Saved Sets"])
 
 # ========================
 # SEARCH TAB
@@ -591,19 +565,17 @@ with tabs[0]:
             lead_id = str(lead.get("lead_id"))
     
             with col:
-                expander_key = f"expander_full_{lead_id}"
-                with st.expander(label, key=expander_key):
-            
+                with st.expander(label):
                     tier_val = lead.get("tier", "—")
                     role_val = lead.get("primary_role", "—")
                     email_val = lead.get("email", "—")
                     country_val = (lead.get("country") or "").strip()
-            
+    
                     if city_val or country_val:
                         st.caption(f"{city_val}, {country_val}".strip(", "))
                     st.caption(f"{role_val} | Tier {tier_val}")
                     st.write(email_val)
-
+    
                     sum_col, _ = st.columns([3, 1])
                     summary_key = f"summary_{lead_id}"
     
@@ -661,6 +633,7 @@ with tabs[0]:
                                     )
     
                                     st.session_state[summary_key] = resp.choices[0].message.content.strip()
+                                    st.rerun()
     
                         else:
                             st.markdown("**Summary:**")
@@ -710,9 +683,7 @@ with tabs[0]:
             label = f"{name} — {city_val}" if city_val else name
 
             with col:
-                safe_lead_id = str(lead.get("lead_id") or "").replace(":", "_").replace("-", "_")
-                expander_key = f"expander_search_{safe_lead_id}"
-                with st.expander(label, key=expander_key):
+                with st.expander(label):
                     st.markdown(f"**{name}**")
                     st.caption(f"{lead.get('primary_role', '—')} | Tier {lead.get('tier', '—')}")
                     st.write(lead.get("email", "—"))
@@ -768,6 +739,7 @@ NOTES:
                                     st.session_state[summary_key] = (
                                         resp.choices[0].message.content.strip()
                                     )
+                                    st.rerun()
                         else:
                             st.markdown("**Summary:**")
                             st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
@@ -965,270 +937,3 @@ with tabs[2]:
                 with st.expander(f"{s['name']}"):
                     st.write(f"**Description:** {s.get('description', '—')}")
                     st.write(f"**Created:** {s.get('created_at', '—')}")
-
-# ============================================================
-# RESEARCH TAB - WITH REAL HUNTER.IO API INTEGRATION
-# ============================================================
-with tabs[3]:
-    st.markdown("## Research")
-    
-    # Hide warning and info banners
-    st.markdown("""
-    <style>
-    div[data-testid="stAlert"] {
-        display: none;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    
-    # Check for Hunter.io API key
-    hunter_api_key = os.getenv("HUNTER_API_KEY")
-    
-    if not supabase:
-        st.warning("Database unavailable.")
-    else:
-        # Tool selector
-        tool_option = st.radio(
-            "Select Tool",
-            ["Domain Search", "Email Finder", "Email Verifier"],
-            horizontal=True
-        )
-        
-        st.markdown("---")
-        
-        # Domain Search Tool
-        if tool_option == "Domain Search":
-            st.markdown("### Domain Search")
-            st.caption("Find all email addresses associated with a domain using Hunter.io API")
-            
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                domain_input = st.text_input("Domain", placeholder="stripe.com", label_visibility="collapsed", key="domain_search_input")
-            with col2:
-                search_button = st.button("Search", type="primary", use_container_width=True, key="domain_search_btn")
-            
-            if search_button and domain_input:
-                domain = extract_domain(domain_input)
-                st.session_state.email_searches.append({
-                    "domain": domain, 
-                    "timestamp": datetime.now()
-                })
-                
-                if hunter_api_key:
-                    with st.spinner("Searching Hunter.io..."):
-                        try:
-                            # Call Hunter.io Domain Search API
-                            url = f"https://api.hunter.io/v2/domain-search?domain={domain}&api_key={hunter_api_key}"
-                            response = requests.get(url)
-                            
-                            if response.status_code == 200:
-                                data = response.json()
-                                emails = data.get('data', {}).get('emails', [])
-                                
-                                if emails:
-                                    st.write(f"Found {len(emails)} email addresses for {domain}")
-                                    
-                                    left_col, right_col = st.columns(2)
-                                    
-                                    for i, email_data in enumerate(emails):
-                                        col = left_col if i % 2 == 0 else right_col
-                                        
-                                        email = email_data.get('value', 'Unknown')
-                                        first_name = email_data.get('first_name', '')
-                                        last_name = email_data.get('last_name', '')
-                                        name = f"{first_name} {last_name}".strip() or "Unknown"
-                                        position = email_data.get('position', 'Position not listed')
-                                        confidence = email_data.get('confidence', 0)
-                                        
-                                        with col:
-                                            with st.expander(f"{name} ({confidence}% confidence)"):
-                                                st.markdown(f"**{name}**")
-                                                st.caption(position)
-                                                st.code(email, language=None)
-                                                
-                                                # Confidence score visualization
-                                                if confidence >= 90:
-                                                    st.success(f"Confidence: {confidence}%")
-                                                elif confidence >= 70:
-                                                    st.info(f"Confidence: {confidence}%")
-                                                else:
-                                                    st.warning(f"Confidence: {confidence}%")
-                                                
-                                                # Show sources
-                                                sources = email_data.get('sources', [])
-                                                if sources:
-                                                    st.caption(f"Found on {len(sources)} source(s)")
-                                                    for source in sources[:3]:
-                                                        st.caption(f"• {source.get('domain', 'Unknown')}")
-                                else:
-                                    st.info(f"No email addresses found for {domain} in Hunter.io database")
-                            elif response.status_code == 401:
-                                st.error("Invalid API key. Please check your HUNTER_API_KEY")
-                            elif response.status_code == 429:
-                                st.error("Rate limit exceeded. Please wait a moment and try again")
-                            else:
-                                st.error(f"API error: {response.status_code} - {response.text}")
-                        
-                        except Exception as e:
-                            st.error(f"Error calling Hunter.io API: {e}")
-                else:
-                    st.warning("Please set HUNTER_API_KEY to use this feature")
-        
-        # Email Finder Tool
-        elif tool_option == "Email Finder":
-            st.markdown("### Email Finder")
-            st.caption("Find someone's email address using their name and company domain")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                first_name = st.text_input("First Name", placeholder="Patrick", key="finder_first")
-                domain = st.text_input("Company Domain", placeholder="stripe.com", key="finder_domain")
-            with col2:
-                last_name = st.text_input("Last Name", placeholder="Collison", key="finder_last")
-                
-            find_button = st.button("Find Email", type="primary", use_container_width=True, key="finder_btn")
-            
-            if find_button and first_name and last_name and domain:
-                domain = extract_domain(domain)
-                
-                if hunter_api_key:
-                    with st.spinner("Finding email with Hunter.io..."):
-                        try:
-                            # Call Hunter.io Email Finder API
-                            url = f"https://api.hunter.io/v2/email-finder?domain={domain}&first_name={first_name}&last_name={last_name}&api_key={hunter_api_key}"
-                            response = requests.get(url)
-                            
-                            if response.status_code == 200:
-                                data = response.json()
-                                email_data = data.get('data', {})
-                                
-                                email = email_data.get('email')
-                                score = email_data.get('score', 0)
-                                position = email_data.get('position')
-                                
-                                if email:
-                                    st.markdown("### Found Email")
-                                    
-                                    with st.expander(f"{first_name} {last_name}", expanded=True):
-                                        st.code(email, language=None)
-                                        
-                                        if position:
-                                            st.caption(f"Position: {position}")
-                                        
-                                        # Confidence visualization
-                                        st.markdown(f"**Confidence Score: {score}%**")
-                                        st.progress(score / 100)
-                                        
-                                        if score >= 90:
-                                            st.success("Very high confidence")
-                                        elif score >= 70:
-                                            st.info("Good confidence")
-                                        elif score >= 50:
-                                            st.warning("Moderate confidence")
-                                        else:
-                                            st.error("Low confidence")
-                                        
-                                        # Show sources
-                                        sources = email_data.get('sources', [])
-                                        if sources:
-                                            st.markdown("**Sources:**")
-                                            for source in sources[:5]:
-                                                st.caption(f"• {source.get('uri', 'Unknown source')}")
-                                else:
-                                    st.info("No email found with high confidence. Try different variations of the name.")
-                            
-                            elif response.status_code == 401:
-                                st.error("Invalid API key. Please check your HUNTER_API_KEY")
-                            elif response.status_code == 429:
-                                st.error("Rate limit exceeded. Please wait a moment and try again")
-                            else:
-                                st.error(f"API error: {response.status_code}")
-                        
-                        except Exception as e:
-                            st.error(f"Error calling Hunter.io API: {e}")
-                else:
-                    st.warning("Please set HUNTER_API_KEY to use this feature")
-        
-        # Email Verifier Tool
-        else:  # tool_option == "Email Verifier"
-            st.markdown("### Email Verifier")
-            st.caption("Verify if an email address is valid and deliverable using Hunter.io")
-            
-            email_to_verify = st.text_input("Email Address", placeholder="patrick@stripe.com", key="verify_email")
-            verify_button = st.button("Verify Email", type="primary", use_container_width=True, key="verify_btn")
-            
-            if verify_button and email_to_verify:
-                if hunter_api_key:
-                    with st.spinner("Verifying email with Hunter.io..."):
-                        try:
-                            # Call Hunter.io Email Verifier API
-                            url = f"https://api.hunter.io/v2/email-verifier?email={email_to_verify}&api_key={hunter_api_key}"
-                            response = requests.get(url)
-                            
-                            if response.status_code == 200:
-                                data = response.json()
-                                result_data = data.get('data', {})
-                                
-                                status = result_data.get('status', 'unknown')
-                                score = result_data.get('score', 0)
-                                
-                                st.session_state.verified_emails.append({
-                                    "email": email_to_verify,
-                                    "status": status,
-                                    "score": score,
-                                    "timestamp": datetime.now()
-                                })
-                                
-                                st.markdown("### Verification Results")
-                                
-                                with st.expander(email_to_verify, expanded=True):
-                                    col1, col2 = st.columns(2)
-                                    
-                                    with col1:
-                                        # Status display
-                                        if status == "valid":
-                                            st.success(f"Status: {status.upper()}")
-                                        elif status == "risky":
-                                            st.warning(f"Status: {status.upper()}")
-                                        else:
-                                            st.error(f"Status: {status.upper()}")
-                                        
-                                        # Score
-                                        st.markdown(f"**Deliverability Score: {score}%**")
-                                        st.progress(score / 100)
-                                    
-                                    with col2:
-                                        st.caption("Verification Details")
-                                        checks = [
-                                            ("Format", result_data.get('regexp', False)),
-                                            ("MX Records", result_data.get('mx_records', False)),
-                                            ("SMTP Server", result_data.get('smtp_server', False)),
-                                            ("SMTP Check", result_data.get('smtp_check', False)),
-                                            ("Not Disposable", not result_data.get('disposable', True)),
-                                            ("Not Gibberish", not result_data.get('gibberish', True))
-                                        ]
-                                        
-                                        for check_name, passed in checks:
-                                            icon = "✅" if passed else "❌"
-                                            st.write(f"{icon} {check_name}")
-                                
-                                # Show sources if found
-                                sources = result_data.get('sources', [])
-                                if sources:
-                                    st.markdown("**Email found on:**")
-                                    for source in sources[:5]:
-                                        st.caption(f"• {source.get('domain', 'Unknown')}")
-                            
-                            elif response.status_code == 401:
-                                st.error("Invalid API key. Please check your HUNTER_API_KEY")
-                            elif response.status_code == 429:
-                                st.error("Rate limit exceeded. Please wait a moment and try again")
-                            else:
-                                st.error(f"API error: {response.status_code}")
-                        
-                        except Exception as e:
-                            st.error(f"Error calling Hunter.io API: {e}")
-                else:
-                    st.warning("Please set HUNTER_API_KEY to use this feature")
-        
-
