@@ -342,7 +342,7 @@ with tabs[0]:
 
         st.session_state["search_page"] = 0
 
-    
+    st.markdown("<hr>", unsafe_allow_html=True)
 
     # ------------------------------
     # Inline AI chat bar (no labels)
