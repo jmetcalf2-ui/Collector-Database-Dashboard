@@ -555,7 +555,7 @@ with tabs[0]:
                             if st.button(f"Summarize {name}", key=f"sum_full_{lead_id}"):
                                 with st.spinner("Summarizing notes..."):
                                     supplements = (
-                                        supabase.table("leads_supplements")
+                                        supabase.table("research")
                                         .select("notes")
                                         .eq("lead_id", lead_id)
                                         .execute()
