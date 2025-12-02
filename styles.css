@@ -234,3 +234,27 @@ div[data-testid="stChatInput"] {
     box-shadow: none !important;
     padding: 0 !important;
 }
+
+/* REMOVE ALL CHAT INPUT CONTAINER BACKGROUNDS / BORDERS / SPACING */
+
+div[data-testid="stChatInputContainer"],
+div[data-testid="stChatInput"],
+div[data-testid="stChatMessageInput"],
+div[data-testid="chatInput"], 
+section[data-testid="stChatInputContainer"],
+section[data-testid="stChatMessageInput"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Also remove the light grey bar that Streamlit adds as a wrapper */
+div[data-testid="stBottomBlockContainer"],
+div[data-testid="stVerticalBlock"],
+div[data-testid="stHorizontalBlock"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
