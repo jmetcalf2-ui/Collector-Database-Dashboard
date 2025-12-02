@@ -970,12 +970,17 @@ with tabs[2]:
 with tabs[3]:
     st.markdown("## Research")
     
+    # Hide warning and info banners
+    st.markdown("""
+    <style>
+    div[data-testid="stAlert"] {
+        display: none;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     # Check for Hunter.io API key
     hunter_api_key = os.getenv("HUNTER_API_KEY")
-    
-    if not hunter_api_key:
-        st.warning("Set HUNTER_API_KEY environment variable to use Hunter.io API. Get your free API key at hunter.io")
-        st.info("Free tier includes 25 searches and 50 verifications per month")
     
     if not supabase:
         st.warning("Database unavailable.")
@@ -1224,5 +1229,4 @@ with tabs[3]:
                 else:
                     st.warning("Please set HUNTER_API_KEY to use this feature")
         
-        st.markdown("---")
-        st.caption("Powered by Hunter.io API • Get your free API key at hunter.io (25 searches + 50 verifications/month free)")
+
