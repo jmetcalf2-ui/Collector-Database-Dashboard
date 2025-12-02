@@ -220,3 +220,17 @@ div[data-testid="stChatInput"] {
     padding: 0 !important;
 }
 
+div[data-testid="stChatInputContainer"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+div[data-testid="stChatInput"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
