@@ -342,8 +342,7 @@ with tabs[0]:
 
         st.session_state["search_page"] = 0
 
-    # Divider between search controls and chat
-    st.markdown("---")
+    
 
     # ------------------------------
     # Inline AI chat bar (no labels)
