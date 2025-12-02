@@ -201,3 +201,22 @@ hr {
     background: none !important;
 }
 
+/* -----------------------------------------------------------
+   REMOVE THE OUTER CHAT INPUT WRAPPER (THE LONG ROUNDED BAR)
+----------------------------------------------------------- */
+
+div[data-testid="stChatInputContainer"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+div[data-testid="stChatInput"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
