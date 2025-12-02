@@ -139,6 +139,53 @@ div[data-testid="stButton"] > button:hover {
   clear: both;
 }
 
+/* -----------------------------------------------------------
+   OVERRIDE STREAMLIT'S HIDDEN CHAT WRAPPERS
+   (Fixes the long oval, spacing, indentation, and auto-bubbles)
+----------------------------------------------------------- */
+
+/* Remove Streamlit's default chat message background + padding */
+.stChatMessage, .stChatMessageContent {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Remove Streamlit's automatic "bubble" around each chat message */
+div[data-testid="chat-message"] {
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Remove Streamlit’s forced full-width content wrapper */
+div[data-testid="chat-message"] > div {
+    width: auto !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+/* Prevent Streamlit from inserting invisible spacing blocks */
+div[data-testid="chatAvatar"], 
+div[data-testid="chatMessageContent"] {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Remove hidden margins above and below chat bubbles */
+block-container div[data-testid="stVerticalBlock"] > div:has(> div[data-testid="chat-message"]) {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+
 .expander-label-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   white-space: pre; /* preserves spaces */
