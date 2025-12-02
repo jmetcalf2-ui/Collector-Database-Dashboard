@@ -591,17 +591,19 @@ with tabs[0]:
             lead_id = str(lead.get("lead_id"))
     
             with col:
-                with st.expander(label):
+                expander_key = f"expander_full_{lead_id}"
+                with st.expander(label, key=expander_key):
+            
                     tier_val = lead.get("tier", "—")
                     role_val = lead.get("primary_role", "—")
                     email_val = lead.get("email", "—")
                     country_val = (lead.get("country") or "").strip()
-    
+            
                     if city_val or country_val:
                         st.caption(f"{city_val}, {country_val}".strip(", "))
                     st.caption(f"{role_val} | Tier {tier_val}")
                     st.write(email_val)
-    
+
                     sum_col, _ = st.columns([3, 1])
                     summary_key = f"summary_{lead_id}"
     
@@ -659,7 +661,6 @@ with tabs[0]:
                                     )
     
                                     st.session_state[summary_key] = resp.choices[0].message.content.strip()
-                                    st.rerun()
     
                         else:
                             st.markdown("**Summary:**")
@@ -766,7 +767,6 @@ NOTES:
                                     st.session_state[summary_key] = (
                                         resp.choices[0].message.content.strip()
                                     )
-                                    st.rerun()
                         else:
                             st.markdown("**Summary:**")
                             st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
