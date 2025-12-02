@@ -710,7 +710,8 @@ with tabs[0]:
             label = f"{name} — {city_val}" if city_val else name
 
             with col:
-                expander_key = f"expander_search_{lead_id}"
+                safe_lead_id = str(lead.get("lead_id") or "").replace(":", "_").replace("-", "_")
+                expander_key = f"expander_search_{safe_lead_id}"
                 with st.expander(label, key=expander_key):
                     st.markdown(f"**{name}**")
                     st.caption(f"{lead.get('primary_role', '—')} | Tier {lead.get('tier', '—')}")
