@@ -190,3 +190,14 @@ block-container div[data-testid="stVerticalBlock"] > div:has(> div[data-testid="
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   white-space: pre; /* preserves spaces */
 }
+
+/* Normalize <hr> so it doesn't look like Streamlit's chat bubble */
+hr {
+    border: none !important;
+    border-top: 1px solid #eee !important;
+    height: 0 !important;
+    margin: 1.2rem 0 !important;
+    padding: 0 !important;
+    background: none !important;
+}
+
