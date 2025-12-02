@@ -517,74 +517,82 @@ with tabs[0]:
         per_page = 50
         if "full_grid_page" not in st.session_state:
             st.session_state.full_grid_page = 0
-
+    
         total_full = get_total_leads_count()
         total_pages = max(1, (total_full + per_page - 1) // per_page)
-
+    
         leads = get_full_grid_page(st.session_state.full_grid_page, per_page)
-
+    
         st.write(f"Showing {len(leads)} of {total_full} collectors")
-
+    
         left_col, right_col = st.columns(2)
-
+    
         for i, lead in enumerate(leads):
             col = left_col if i % 2 == 0 else right_col
-
+    
             name = lead.get("full_name", "Unnamed")
             city_val = (lead.get("city") or "").strip()
             label = f"{name} — {city_val}" if city_val else name
             lead_id = str(lead.get("lead_id"))
-
+    
             with col:
                 with st.expander(label):
                     tier_val = lead.get("tier", "—")
                     role_val = lead.get("primary_role", "—")
                     email_val = lead.get("email", "—")
                     country_val = (lead.get("country") or "").strip()
-
+    
                     if city_val or country_val:
                         st.caption(f"{city_val}, {country_val}".strip(", "))
                     st.caption(f"{role_val} | Tier {tier_val}")
                     st.write(email_val)
-
+    
                     sum_col, _ = st.columns([3, 1])
                     summary_key = f"summary_{lead_id}"
-
+    
                     with sum_col:
                         if summary_key not in st.session_state:
                             if st.button(f"Summarize {name}", key=f"sum_full_{lead_id}"):
                                 with st.spinner("Summarizing notes..."):
+    
+                                    # -----------------------
+                                    # Research table fetch
+                                    # -----------------------
                                     supplements = (
                                         supabase.table("research")
-                                        .select("notes")
+                                        .select("content_text, source_url, source_title, created_at")
                                         .eq("lead_id", lead_id)
                                         .execute()
                                         .data
                                         or []
                                     )
-
-                                    base_notes = lead.get("notes") or ""
+    
+                                    # Base notes: if your leads table has its own stored notes
+                                    # (otherwise set base_notes = "")
+                                    base_notes = lead.get("content_text") or ""
+    
+                                    # Supplement notes: now correctly referencing "content_text"
                                     supplement_notes = "\n\n".join(
-                                        (s.get("notes") or "").strip()
+                                        (s.get("content_text") or "").strip()
                                         for s in supplements
                                     )
-
+    
                                     combined = (
                                         base_notes
                                         + ("\n\n" if base_notes and supplement_notes else "")
                                         + supplement_notes
                                     ).strip()
-
+    
                                     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
                                     prompt = f"""
-Summarize these collector notes into 5–7 factual bullet points.
-Avoid adjectives. Focus on artists collected, museum affiliations, geography,
-philanthropy, acquisitions, and collecting tendencies.
-
-NOTES:
-{combined}
-"""
-
+    Summarize these collector notes into 5–7 factual bullet points.
+    Avoid adjectives. Focus on artists collected, museum affiliations, geography,
+    philanthropy, acquisitions, and collecting tendencies.
+    
+    NOTES:
+    {combined}
+    """
+    
                                     resp = client.chat.completions.create(
                                         model="gpt-4o-mini",
                                         messages=[
@@ -594,15 +602,14 @@ NOTES:
                                         temperature=0.2,
                                         max_tokens=500,
                                     )
-
-                                    st.session_state[summary_key] = (
-                                        resp.choices[0].message.content.strip()
-                                    )
+    
+                                    st.session_state[summary_key] = resp.choices[0].message.content.strip()
                                     st.rerun()
+    
                         else:
                             st.markdown("**Summary:**")
                             st.markdown(st.session_state[summary_key], unsafe_allow_html=True)
-
+    
         col_space_left, prev_col, next_col, col_space_right = st.columns([2, 1, 1, 2])
         with prev_col:
             if st.button("Prev Page", disabled=st.session_state.full_grid_page == 0):
@@ -615,6 +622,7 @@ NOTES:
             ):
                 st.session_state.full_grid_page += 1
                 st.rerun()
+
 
     # ------------------------------
     # SEARCH GRID (HAS RESULTS)
